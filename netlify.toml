@@ -1,0 +1,11 @@
+# netlify.toml — บอก Netlify ว่าฟังก์ชันเซิร์ฟเวอร์ (สำหรับส่งแจ้งเตือนเข้า LINE) อยู่โฟลเดอร์ไหน
+# Netlify Functions เป็นฟีเจอร์ฟรี ไม่ต้องผูกบัตรเครดิต/ไม่ต้องอัปเกรดแผนใดๆ (ต่างจาก Firebase Cloud
+# Functions ที่ต้องอัปเกรดเป็นแผน Blaze) — ดูวิธีตั้งค่าใน README.md หัวข้อ "แจ้งเตือนเข้า LINE ทันทีที่
+# เช็คอิน/เช็คเอาท์ และยื่น/พิจารณาคำขอลา"
+
+[build]
+  functions = "netlify/functions"
+  publish = "."
+
+[functions]
+  node_bundler = "esbuild"

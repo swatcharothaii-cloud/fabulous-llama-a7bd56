@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================================
+    //  หมายเหตุด้านความปลอดภัย (อ่านก่อนใช้งาน)
+    //  แอปนี้ไม่มีระบบล็อกอิน/รหัสผ่าน ทั้งฝั่งพนักงาน (index.html) และฝั่งแอดมิน (admin.html)
+    //  ระบุตัวตนด้วยการ "เลือกชื่อ" จากรายการ (พนักงาน: จากฐานข้อมูล employees, แอดมิน: จาก
+    //  ADMINS คงที่ใน js/config.js) เพื่อบันทึกไว้ว่าใครเป็นคนทำรายการ — ไม่ใช่การยืนยันตัวตนจริง
+    //  ผลคือ: ใครก็ตามที่มีลิงก์ไปยังแอปนี้ สามารถดู/เพิ่ม/แก้ไขข้อมูลการลงเวลา การลา และ
+    //  ข้อมูลพนักงานทั้งหมดได้ โดยไม่ต้องพิสูจน์ตัวตนใดๆ
+    //  จึงควร "ไม่เผยแพร่ลิงก์นี้ต่อสาธารณะ" — แชร์เฉพาะพนักงาน/ทีมงานที่เกี่ยวข้องเท่านั้น
+    //  หากต้องการความปลอดภัยที่สูงขึ้น ควรพิจารณาเพิ่ม Firebase Authentication ในอนาคต
+    // ============================================================
+
+    match /employees/{employeeId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if request.resource.data.keys().hasAll(['name', 'shiftId']);
+      allow update: if true;
+      allow delete: if false; // ใช้การ "ปิดใช้งาน" (active=false) แทนการลบ เพื่อรักษาประวัติการลงเวลาเดิม
+    }
+
+    match /attendanceRecords/{recordId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if request.resource.data.keys().hasAll(['employeeId', 'date', 'events']);
+      allow update: if true;
+      allow delete: if false;
+    }
+
+    match /leaveRequests/{leaveId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if request.resource.data.keys().hasAll(['employeeId', 'typeId', 'startDate', 'endDate', 'status']);
+      allow update: if true;
+      allow delete: if false;
+    }
+
+    match /dayOffSwaps/{swapId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if request.resource.data.keys().hasAll(['employeeId', 'originalDate', 'newDate']);
+      allow update: if true;
+      allow delete: if true; // แอดมินสามารถยกเลิกรายการสลับวันหยุดที่บันทึกผิดได้
+    }
+
+    match /holidays/{holidayId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if request.resource.data.keys().hasAll(['date', 'name']);
+      allow update: if true;
+      allow delete: if true;
+    }
+
+    match /shiftDefs/{shiftId} {
+      allow get: if true;
+      allow list: if true;
+      allow create, update: if request.resource.data.keys().hasAll(['name', 'start', 'end']);
+      allow delete: if false; // ป้องกันการลบกะที่อาจมีพนักงาน/ประวัติอ้างอิงอยู่โดยไม่ตั้งใจ
+    }
+
+    // การผูกบัญชี LINE ของแอดมิน (เพื่อรับแจ้งเตือนอัตโนมัติผ่าน Netlify Function) — id เอกสาร = admin.id
+    // จาก ADMINS ใน js/config.js ไม่มีข้อมูลอ่อนไหว (แค่ userId/ชื่อที่แสดงบน LINE) จึงเปิดอ่าน/เขียน
+    // ไว้แบบเดียวกับ collection อื่นๆ ในแอปนี้ (ดูหมายเหตุด้านความปลอดภัยด้านบน)
+    match /adminLineLinks/{adminId} {
+      allow get: if true;
+      allow list: if true;
+      allow create, update: if request.resource.data.keys().hasAll(['adminId', 'lineUserId']);
+      allow delete: if false;
+    }
+
+    // ค่าตั้งค่าระดับบริษัท เช่น appSettings/leaveQuotaDefaults (โควต้าวันลาเริ่มต้น: ลาป่วย/ลากิจ/ลาพักร้อน)
+    // ไม่มีข้อมูลอ่อนไหว จึงเปิดอ่าน/เขียนแบบเดียวกับ collection อื่นๆ ในแอปนี้
+    match /appSettings/{settingId} {
+      allow get: if true;
+      allow list: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+  }
+}

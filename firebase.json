@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "README.md",
+      "firestore.rules",
+      "js/*.test.mjs",
+      "netlify.toml",
+      "netlify/**"
+    ],
+    "rewrites": [
+      { "source": "/admin", "destination": "/admin.html" }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="admin.pageTitle">ระบบแอดมิน - ระบบลงเวลาทำงาน</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.24.0/sdk.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+</head>
+<body>
+
+<div class="brand-bar brand-bar--admin" id="brand-bar"></div>
+<button type="button" class="lang-toggle-btn" id="lang-toggle-btn">EN</button>
+
+<!-- ============ IDENTITY PICKER (จำกัดสิทธิ์เฉพาะแอดมินที่อนุมัติ + ยืนยันด้วย PIN) ============ -->
+<div class="login-wrap" id="identity-screen">
+  <div class="login-card" style="max-width:420px;">
+    <div id="admin-step-select">
+      <h2 style="margin-top:0;" data-i18n="admin.selectNameTitle">👋 เลือกชื่อของคุณ</h2>
+      <p class="hint" data-i18n="admin.selectNameHint">ระบบอนุญาตให้เฉพาะแอดมินที่ได้รับอนุมัติเท่านั้นเข้าใช้งานได้ เลือกชื่อแล้วยืนยันด้วยรหัส PIN</p>
+      <div class="admin-id-grid" id="admin-id-grid"></div>
+    </div>
+    <div id="admin-step-pin" style="display:none;">
+      <h2 style="margin-top:0;" data-i18n="admin.pinTitle">🔒 ยืนยันตัวตน</h2>
+      <p class="hint">กรอกรหัส PIN ของ <b id="admin-pin-name"></b> เพื่อเข้าใช้งานหน้าแอดมิน</p>
+      <div class="field" style="margin-top:14px;">
+        <input type="password" id="admin-pin-input" inputmode="numeric" placeholder="รหัส PIN" data-i18n-placeholder="admin.pinPlaceholder" autocomplete="off">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-outline" id="admin-pin-back-btn" style="flex:1;" data-i18n="admin.pinBack">← กลับ</button>
+        <button class="btn btn-primary" id="admin-pin-confirm-btn" style="flex:2;" data-i18n="admin.pinConfirm">ยืนยันเข้าใช้งาน</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DASHBOARD ============ -->
+<div class="admin-shell" id="dashboard" style="display:none;">
+
+  <div class="admin-topbar">
+    <div>
+      <h2 style="margin:0;" data-i18n="admin.header">⏰ แอดมินระบบลงเวลาทำงาน</h2>
+      <div class="hint" id="admin-whoami"></div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-outline btn-sm" id="switch-user-btn" data-i18n="common.switchUser">เปลี่ยนผู้ใช้งาน</button>
+    </div>
+  </div>
+
+  <!-- แถบเชื่อมต่อ LINE ของแอดมิน (เพื่อรับแจ้งเตือนเช็คอิน/เอาท์/คำขอลาอัตโนมัติ) — ซ่อนอัตโนมัติถ้าเชื่อมต่อแล้ว -->
+  <div class="admin-line-connect-bar" id="admin-line-connect-bar" style="display:none;">
+    <span data-i18n="admin.lineConnectMsg">🔔 เชื่อมต่อ LINE ของคุณ เพื่อรับการแจ้งเตือนอัตโนมัติทุกครั้งที่มีการเช็คอิน/เช็คเอาท์/ยื่นคำขอลา</span>
+    <button class="btn btn-primary btn-sm" id="admin-line-connect-btn" data-i18n="admin.lineConnectBtn">เชื่อมต่อเลย</button>
+  </div>
+
+  <div class="tabs" style="margin:0 0 18px; position:static;">
+    <button class="tab-btn active" data-atab="report" data-i18n="atab.report">📊 รายงาน/OT</button>
+    <button class="tab-btn" data-atab="employees" data-i18n="atab.employees">👥 พนักงาน</button>
+    <button class="tab-btn" data-atab="schedule" data-i18n="atab.schedule">🗓️ กะ/วันหยุด/สลับวันหยุด</button>
+    <button class="tab-btn" data-atab="leave" data-i18n="atab.leave">🌴 คำขอลา</button>
+    <button class="tab-btn" data-atab="leavesummary" data-i18n="atab.leavesummary">📊 สรุปวันลา</button>
+  </div>
+
+  <!-- ================= TAB: รายงาน / OT ================= -->
+  <section id="atab-report" class="atab-panel">
+    <div class="stat-grid" id="stat-grid"></div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <input type="date" id="rep-from">
+        <input type="date" id="rep-to">
+        <select id="rep-dept"><option value="" data-i18n="rep.allDept">ทุกแผนก</option></select>
+        <select id="rep-employee"><option value="" data-i18n="rep.allEmployees">พนักงานทั้งหมด</option></select>
+        <button class="btn btn-secondary btn-sm" id="rep-search-btn" data-i18n="common.search">ค้นหา</button>
+        <button class="btn btn-outline btn-sm" id="rep-export-btn" data-i18n="rep.export">📊 ส่งออก Excel</button>
+        <button class="btn btn-outline btn-sm" id="rep-send-line-btn" data-i18n="rep.sendLine">📤 ส่งสรุปวันนี้เข้า LINE</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="rep.thDate">วันที่</th>
+            <th data-i18n="rep.thEmployee">พนักงาน</th>
+            <th data-i18n="rep.thShift">กะ</th>
+            <th data-i18n="rep.thDayType">ประเภทวัน</th>
+            <th data-i18n="rep.thInOut">เข้า-ออกครั้งแรก/สุดท้าย</th>
+            <th data-i18n="rep.thWorkHours">ชั่วโมงทำงาน</th>
+            <th data-i18n="rep.thOT">OT</th>
+            <th data-i18n="rep.thLate">มาสาย</th>
+            <th data-i18n="rep.thPhoto">รูปยืนยันตัวตน</th>
+            <th data-i18n="rep.thLocation">ตำแหน่ง</th>
+          </tr>
+        </thead>
+        <tbody id="report-tbody"></tbody>
+      </table>
+    </div>
+    <div id="report-empty"></div>
+  </section>
+
+  <!-- ================= TAB: พนักงาน ================= -->
+  <section id="atab-employees" class="atab-panel" style="display:none;">
+    <div class="card">
+      <h3 style="margin-top:0;" id="emp-form-title" data-i18n="emp.addTitle">➕ เพิ่มพนักงานใหม่</h3>
+      <form id="emp-form">
+        <input type="hidden" id="emp-edit-id">
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;"><label data-i18n="emp.code">รหัสพนักงาน</label><input type="text" id="emp-code" placeholder="เช่น EMP001" data-i18n-placeholder="emp.codePh"></div>
+          <div class="field" style="flex:2;"><label data-i18n="emp.name">ชื่อ-นามสกุล *</label><input type="text" id="emp-name" required></div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;">
+            <label data-i18n="emp.dept">แผนก</label>
+            <select id="emp-dept"></select>
+          </div>
+          <div class="field" style="flex:1;">
+            <label data-i18n="emp.shift">กะการทำงาน *</label>
+            <select id="emp-shift" required></select>
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="emp.dayoff">วันหยุดประจำสัปดาห์</label>
+          <select id="emp-dayoff">
+            <option value="0" data-i18n="day.sun">อาทิตย์</option>
+            <option value="1" data-i18n="day.mon">จันทร์</option>
+            <option value="2" data-i18n="day.tue">อังคาร</option>
+            <option value="3" data-i18n="day.wed">พุธ</option>
+            <option value="4" data-i18n="day.thu">พฤหัสบดี</option>
+            <option value="5" data-i18n="day.fri">ศุกร์</option>
+            <option value="6" data-i18n="day.sat">เสาร์</option>
+          </select>
+        </div>
+        <div class="field" style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="emp-team-lead" style="width:auto;">
+          <label for="emp-team-lead" style="margin:0;" data-i18n="emp.teamLeadLabel">แต่งตั้งเป็นหัวหน้าทีมของแผนกนี้ (จะเห็นแท็บ "ทีมของฉัน" และได้รับแจ้งเตือนเมื่อทีมเช็คอิน/เช็คเอาท์)</label>
+        </div>
+
+        <div class="field" style="border-top:1px dashed #e2e8f0; padding-top:12px; margin-top:4px;">
+          <label data-i18n="emp.quotaTitle">โควต้าวันลาต่อปีของพนักงานคนนี้</label>
+          <p class="hint" style="margin:2px 0 8px;" data-i18n="emp.quotaHint">ค่าเริ่มต้นดึงมาจากค่าเริ่มต้นบริษัท ปรับเฉพาะคนนี้ได้ที่นี่</p>
+          <div style="display:flex; gap:10px;">
+            <div class="field" style="flex:1;"><label data-i18n="lq.sick">ลาป่วย (วัน/ปี)</label><input type="number" id="emp-quota-sick" min="0"></div>
+            <div class="field" style="flex:1;"><label data-i18n="lq.personal">ลากิจ (วัน/ปี)</label><input type="number" id="emp-quota-personal" min="0"></div>
+            <div class="field" style="flex:1;"><label data-i18n="lq.vacation">ลาพักร้อน (วัน/ปี)</label><input type="number" id="emp-quota-vacation" min="0"></div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+          <button type="submit" class="btn btn-primary" id="emp-save-btn" style="flex:1;" data-i18n="common.save">บันทึก</button>
+          <button type="button" class="btn btn-outline" id="emp-cancel-edit-btn" style="display:none;" data-i18n="common.cancelEdit">ยกเลิกแก้ไข</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card" style="margin-bottom:8px;">
+      <div class="filter-bar" style="margin-bottom:0;">
+        <input type="text" id="emp-list-search" placeholder="🔍 ค้นหาพนักงาน..." data-i18n-placeholder="emp.searchPh" style="flex:1;">
+        <button class="btn btn-outline btn-sm" id="emp-export-btn" style="white-space:nowrap;" data-i18n="emp.exportBtn">📊 ส่งออกรายชื่อ (Excel)</button>
+      </div>
+    </div>
+    <div id="employee-list" style="padding: 0 16px;"></div>
+  </section>
+
+  <!-- ================= TAB: กะ / วันหยุด / สลับวันหยุด ================= -->
+  <section id="atab-schedule" class="atab-panel" style="display:none;">
+
+    <div class="card">
+      <h3 style="margin-top:0;" data-i18n="sched.shiftTitle">🕒 กะการทำงาน</h3>
+      <form id="shift-form">
+        <input type="hidden" id="shift-edit-id">
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:2;"><label data-i18n="sched.shiftName">ชื่อกะ *</label><input type="text" id="shift-name" required></div>
+          <div class="field" style="flex:1;"><label data-i18n="sched.shiftColor">สี</label><input type="text" id="shift-color" placeholder="#2563eb" value="#2563eb"></div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;"><label data-i18n="sched.shiftStart">เวลาเริ่ม *</label><input type="time" id="shift-start" required></div>
+          <div class="field" style="flex:1;"><label data-i18n="sched.shiftEnd">เวลาสิ้นสุด *</label><input type="time" id="shift-end" required></div>
+          <div class="field" style="flex:1;"><label data-i18n="sched.shiftBreak">พักเที่ยง (นาที)</label><input type="number" id="shift-break" value="60" min="0"></div>
+        </div>
+        <div class="field" style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="shift-crosses" style="width:auto;">
+          <label for="shift-crosses" style="margin:0;" data-i18n="sched.shiftCrosses">กะนี้ข้ามเที่ยงคืน (เช่น กะดึก)</label>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button type="submit" class="btn btn-primary" style="flex:1;" data-i18n="sched.shiftSave">บันทึกกะ</button>
+          <button type="button" class="btn btn-outline" id="shift-cancel-edit-btn" style="display:none;" data-i18n="common.cancelEdit">ยกเลิกแก้ไข</button>
+        </div>
+      </form>
+      <div id="shift-list" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;" data-i18n="sched.holidayTitle">🎌 วันหยุดประจำปีของบริษัท</h3>
+      <form id="holiday-form" class="tag-input-row" style="margin-bottom: 14px;">
+        <input type="date" id="holiday-date" required>
+        <input type="text" id="holiday-name" placeholder="ชื่อวันหยุด" data-i18n-placeholder="sched.holidayNamePh" required>
+        <button type="submit" class="btn btn-secondary btn-sm" data-i18n="common.add">เพิ่ม</button>
+      </form>
+      <div class="calendar-grid" id="holiday-list"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;" data-i18n="sched.swapTitle">🔄 สลับวันหยุด</h3>
+      <p class="hint" data-i18n="sched.swapHint">เมื่อพนักงานสลับวันหยุด ระบบจะจัดการวันทำงาน/วันหยุดของวันที่เกี่ยวข้องให้อัตโนมัติในการคำนวณ OT และรายงาน</p>
+      <form id="swap-form">
+        <div class="field">
+          <label data-i18n="sched.swapEmployee">พนักงาน *</label>
+          <select id="swap-employee" required></select>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;">
+            <label data-i18n="sched.swapOriginal">วันหยุดเดิม (จะกลายเป็นวันทำงาน) *</label>
+            <input type="date" id="swap-original" required>
+          </div>
+          <div class="field" style="flex:1;">
+            <label data-i18n="sched.swapNew">วันหยุดใหม่ที่จะใช้แทน (จะกลายเป็นวันหยุด) *</label>
+            <input type="date" id="swap-new" required>
+          </div>
+        </div>
+        <div class="field"><label data-i18n="sched.swapReason">หมายเหตุ</label><input type="text" id="swap-reason" placeholder="เหตุผลการสลับ (ถ้ามี)" data-i18n-placeholder="sched.swapReasonPh"></div>
+        <button type="submit" class="btn btn-primary" data-i18n="sched.swapSave">บันทึกการสลับวันหยุด</button>
+      </form>
+      <div id="swap-list" style="margin-top:14px;"></div>
+    </div>
+
+  </section>
+
+  <!-- ================= TAB: คำขอลา ================= -->
+  <section id="atab-leave" class="atab-panel" style="display:none;">
+    <div class="filter-bar">
+      <select id="leave-filter-status">
+        <option value="" data-i18n="aleave.allStatus">สถานะทั้งหมด</option>
+        <option value="รออนุมัติ" data-i18n="aleave.pending">รออนุมัติ</option>
+        <option value="อนุมัติแล้ว" data-i18n="aleave.approved">อนุมัติแล้ว</option>
+        <option value="ไม่อนุมัติ" data-i18n="aleave.rejected">ไม่อนุมัติ</option>
+      </select>
+    </div>
+    <div id="admin-leave-list" style="padding: 0 4px;"></div>
+  </section>
+
+  <!-- ================= TAB: สรุปวันลา ================= -->
+  <section id="atab-leavesummary" class="atab-panel" style="display:none;">
+    <div class="card">
+      <h3 style="margin-top:0;" data-i18n="lq.title">⚙️ ตั้งค่าโควต้าวันลาเริ่มต้น (ต่อปี)</h3>
+      <p class="hint" data-i18n="lq.hint">ค่านี้ใช้เป็นค่าเริ่มต้นเมื่อเพิ่มพนักงานใหม่ หรือกด "ใช้ค่านี้กับพนักงานทุกคน" ด้านล่าง</p>
+      <div style="display:flex; gap:10px;">
+        <div class="field" style="flex:1;"><label data-i18n="lq.sick">ลาป่วย (วัน/ปี)</label><input type="number" id="lq-default-sick" min="0"></div>
+        <div class="field" style="flex:1;"><label data-i18n="lq.personal">ลากิจ (วัน/ปี)</label><input type="number" id="lq-default-personal" min="0"></div>
+        <div class="field" style="flex:1;"><label data-i18n="lq.vacation">ลาพักร้อน (วัน/ปี)</label><input type="number" id="lq-default-vacation" min="0"></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:8px;">
+        <button type="button" class="btn btn-primary" id="lq-save-defaults-btn" style="flex:1;" data-i18n="lq.saveDefaults">💾 บันทึกค่าเริ่มต้น</button>
+        <button type="button" class="btn btn-outline" id="lq-apply-all-btn" style="flex:1;" data-i18n="lq.applyAll">📋 ใช้ค่านี้กับพนักงานทุกคน</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;" data-i18n="lq.tableTitle">สรุปการใช้วันลารายบุคคล (ปีนี้)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="lq.colEmployee">พนักงาน</th>
+              <th data-i18n="lq.colDept">แผนก</th>
+              <th data-i18n="lq.sick">ลาป่วย (วัน/ปี)</th>
+              <th data-i18n="lq.personal">ลากิจ (วัน/ปี)</th>
+              <th data-i18n="lq.vacation">ลาพักร้อน (วัน/ปี)</th>
+            </tr>
+          </thead>
+          <tbody id="leavesummary-tbody"></tbody>
+        </table>
+      </div>
+      <div id="leavesummary-empty"></div>
+    </div>
+  </section>
+
+</div>
+
+<div id="toast-container"></div>
+
+<script type="module" src="js/admin.js"></script>
+</body>
+</html>
