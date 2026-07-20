@@ -15,8 +15,8 @@ export const FIREBASE_CONFIG = {
 };
 
 // 2) LINE LIFF ID (LINE Developers Console > สร้าง LIFF app) — ถ้าไม่ต้องการรันผ่าน LINE ให้เว้นว่างไว้เป็น ""
-export const LIFF_ID = "2008016337-Mlmq8Fbd"; // ใช้กับหน้าพนักงาน (index.html)
-export const LIFF_ID_ADMIN = "2008016337-IdIZGgWU"; // ใช้กับหน้าแอดมิน (admin.html) — คนละ LIFF app กับข้างบน
+export const LIFF_ID = "2010761793-s9SYXSSn"; // ใช้กับหน้าพนักงาน (index.html)
+export const LIFF_ID_ADMIN = "2010761793-qoipiOoE"; // ใช้กับหน้าแอดมิน (admin.html) — คนละ LIFF app กับข้างบน
 
 // 3) ข้อมูลบริษัท (แสดงหัวหน้า) — แก้ไขได้ตามต้องการ
 export const COMPANY = {
