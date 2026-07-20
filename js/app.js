@@ -237,6 +237,15 @@ async function initLiff() {
   try {
     await liff.init({ liffId: LIFF_ID });
     if (!liff.isLoggedIn()) {
+      // ถ้าไม่ได้เปิดผ่านแอป LINE (เช่น เปิดลิงก์เว็บตรงๆ ใน Safari/Chrome) การพยายาม login ผ่าน LINE
+      // อัตโนมัติแบบนี้อาจเจอ error "400 Bad Request" จาก access.line.me ได้ (ปัญหาที่เจอบ่อยเวลาเปิด
+      // จากเบราว์เซอร์ภายนอกโดยตรงแทนที่จะเปิดผ่านลิงก์ liff.line.me ในแอป LINE) — ในกรณีนี้ให้ข้ามการ
+      // login ผ่าน LINE ไปเลย แล้วใช้งานเป็นเว็บแอปปกติแทน (เลือกชื่อ + จำในอุปกรณ์นี้) ไม่ต้อง redirect
+      if (!liff.isInClient()) {
+        console.warn("เปิดผ่านเบราว์เซอร์ภายนอก (ไม่ใช่แอป LINE) — ข้ามการ login ผ่าน LINE อัตโนมัติ ใช้งานแบบเว็บแอปปกติแทน");
+        liffProfile = null;
+        return;
+      }
       liff.login({ redirectUri: window.location.href });
       return; // กำลังจะ redirect ไปหน้าล็อกอิน LINE — ไม่ต้องทำอะไรต่อ
     }
