@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 320" width="900" height="320" role="img" aria-label="Trio-C Solution logo">
+  <!-- โลโก้ TRI-C (วาดจำลองสไตล์ตามภาพต้นฉบับที่ได้รับ — เปลี่ยนเป็นไฟล์จริงได้ทุกเมื่อโดยแทนที่ไฟล์นี้ -->
+  <rect x="10" y="10" width="880" height="300" rx="150" ry="150" fill="#ffffff" stroke="#a83aa0" stroke-width="14"/>
+
+  <!-- เส้นคาดบน/ล่าง ฝั่งซ้าย (รอบคำว่า TRI) -->
+  <line x1="55" y1="108" x2="292" y2="108" stroke="#111111" stroke-width="9"/>
+  <line x1="55" y1="212" x2="292" y2="212" stroke="#111111" stroke-width="9"/>
+
+  <!-- เส้นคาดบน/ล่าง ฝั่งขวา (รอบคำว่า -C) -->
+  <line x1="390" y1="108" x2="565" y2="108" stroke="#111111" stroke-width="9"/>
+  <line x1="390" y1="212" x2="565" y2="212" stroke="#111111" stroke-width="9"/>
+
+  <!-- ข้อความ TRI -->
+  <text x="52" y="228" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="150" fill="#111111" letter-spacing="-4">TRI</text>
+
+  <!-- แท่งสี่เหลี่ยมกรอบม่วง พร้อมจุดกลม ตรงกลาง (ตัว I แบบมีสไตล์) -->
+  <rect x="300" y="68" width="70" height="184" fill="#ffffff" stroke="#a83aa0" stroke-width="12"/>
+  <circle cx="335" cy="160" r="11" fill="#111111"/>
+
+  <!-- ข้อความ -C -->
+  <text x="385" y="228" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="150" fill="#111111" letter-spacing="-4">-C</text>
+</svg>

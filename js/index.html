@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title data-i18n="page.employeeTitle">ระบบลงเวลาทำงาน (Attendance)</title>
+<link rel="stylesheet" href="css/style.css">
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.24.0/sdk.js"></script>
+</head>
+<body>
+
+<div class="brand-bar" id="brand-bar"></div>
+<button type="button" class="lang-toggle-btn" id="lang-toggle-btn">EN</button>
+
+<!-- ============ IDENTITY PICKER / เชื่อมบัญชี LINE (ไม่ต้องล็อกอินด้วยรหัสผ่าน) ============ -->
+<div class="login-wrap" id="identity-screen">
+  <div class="login-card">
+    <h2 style="margin-top:0;" id="id-screen-title">👋 ลงทะเบียนใช้งานครั้งแรก</h2>
+    <p class="hint" id="id-screen-subtitle">กรอกข้อมูลของคุณเพื่อลงทะเบียน (ทำครั้งเดียวเท่านั้น) ระบบจะจดจำไว้ให้ ไม่ต้องกรอกซ้ำในครั้งถัดไป</p>
+
+    <!-- เลือกชื่อจากรายชื่อพนักงานที่มีอยู่แล้ว (แอดมินเพิ่มไว้ล่วงหน้า) — ป้องกันไม่ให้เกิดรายชื่อซ้ำ
+         จากการที่พนักงานกรอกฟอร์ม "ลงทะเบียนใหม่" ทั้งที่ชื่อของตัวเองมีอยู่ในระบบแล้ว -->
+    <div id="select-existing-panel">
+      <div class="field">
+        <label data-i18n="reg.searchLabel">🔍 ค้นหาชื่อของคุณจากรายชื่อพนักงาน</label>
+        <input type="text" id="emp-search-input" placeholder="พิมพ์ชื่อเพื่อค้นหา..." data-i18n-placeholder="reg.searchPh">
+      </div>
+      <div id="emp-select-list" class="emp-pick-list"></div>
+      <p class="hint" style="margin-top:14px; text-align:center;">
+        <span data-i18n="reg.notInList">ไม่เจอชื่อของคุณ?</span>
+        <a href="#" id="show-register-link" data-i18n="reg.registerNewLink">ลงทะเบียนพนักงานใหม่</a>
+      </p>
+    </div>
+
+    <form id="register-form" style="margin-top:14px; display:none;">
+      <div class="field">
+        <label data-i18n="reg.fullname">ชื่อ-นามสกุล *</label>
+        <input type="text" id="reg-fullname" placeholder="เช่น สมชาย ใจดี" data-i18n-placeholder="reg.fullnamePh" required>
+      </div>
+      <div class="field">
+        <label data-i18n="reg.nickname">ชื่อเล่น *</label>
+        <input type="text" id="reg-nickname" placeholder="เช่น ชาย" data-i18n-placeholder="reg.nicknamePh" required>
+      </div>
+      <div class="field">
+        <label data-i18n="reg.dob">วันเดือนปีเกิด *</label>
+        <input type="date" id="reg-dob" required>
+      </div>
+      <button type="submit" class="btn btn-primary" id="reg-submit-btn" style="width:100%; margin-top:6px;" data-i18n="reg.submit">✅ ลงทะเบียน</button>
+      <p class="hint" style="margin-top:14px; text-align:center;">
+        <a href="#" id="show-select-link" data-i18n="reg.backToSelectLink">← กลับไปเลือกชื่อจากรายชื่อเดิม</a>
+      </p>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MAIN APP ============ -->
+<div class="app-shell" id="main-app" style="display:none;">
+
+  <div class="app-header">
+    <h1 data-i18n="app.header">⏰ ระบบลงเวลาทำงาน</h1>
+    <p id="welcome-line">ยินดีต้อนรับ</p>
+    <p class="hint" id="identity-mode-line" style="color:#fff; opacity:0.85; margin:2px 0 0;"></p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="home" data-i18n="tab.home">🏠 หน้าหลัก</button>
+    <button class="tab-btn" data-tab="history" data-i18n="tab.history">📅 ประวัติ</button>
+    <button class="tab-btn" data-tab="leave" data-i18n="tab.leave">🌴 การลา</button>
+    <button class="tab-btn" data-tab="team" id="tab-btn-team" style="display:none;" data-i18n="tab.team">👥 ทีมของฉัน</button>
+  </div>
+
+  <!-- ================= TAB: HOME (เช็คอิน/เช็คเอาท์) ================= -->
+  <section id="tab-home" class="tab-panel">
+    <div class="card clock-card">
+      <div class="clock-date" id="clock-date">-</div>
+      <div class="clock-now" id="clock-now">--:--:--</div>
+      <div id="shift-today-badge-wrap"><span class="shift-today-badge" style="background:#f1f5f9; color:#64748b;" data-i18n="home.loading">⏳ กำลังโหลดข้อมูล...</span></div>
+      <div id="day-flag-badge-wrap"></div>
+
+      <button class="btn-punch" id="btn-punch" type="button" style="display:none;" disabled>
+        <span class="btn-punch-icon" id="btn-punch-icon">🟢</span>
+        <span class="btn-punch-label" id="btn-punch-label">เช็คอิน</span>
+      </button>
+      <input type="file" id="punch-photo-input" accept="image/*" capture="user" style="display:none;">
+      <div class="hint" id="geo-status-line" style="margin-top:8px;"></div>
+      <div class="hint" id="photo-status-line" style="margin-top:2px;"></div>
+
+      <div class="day-summary-grid" id="today-summary-grid"></div>
+
+      <div class="session-log" id="today-session-log"></div>
+    </div>
+  </section>
+
+  <!-- ================= TAB: HISTORY ================= -->
+  <section id="tab-history" class="tab-panel" style="display:none;">
+    <div class="card">
+      <div class="filter-bar">
+        <input type="date" id="hist-from">
+        <input type="date" id="hist-to">
+        <button class="btn btn-secondary btn-sm" id="hist-search-btn" data-i18n="common.search">ค้นหา</button>
+      </div>
+    </div>
+    <div id="history-list" style="padding: 0 16px;"></div>
+  </section>
+
+  <!-- ================= TAB: LEAVE ================= -->
+  <section id="tab-leave" class="tab-panel" style="display:none;">
+    <div class="card leave-card">
+      <h3 style="margin-top:0;" data-i18n="leave.balanceTitle">📊 สรุปวันลาปีนี้</h3>
+      <div class="stat-grid" id="leave-balance-summary"></div>
+    </div>
+    <div class="card leave-card">
+      <h3 style="margin-top:0;" data-i18n="leave.formTitle">📝 ยื่นคำขอลา</h3>
+      <form id="leave-form">
+        <div class="field">
+          <label data-i18n="leave.type">ประเภทการลา *</label>
+          <select id="leave-type" required></select>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;">
+            <label data-i18n="leave.start">วันที่เริ่มลา *</label>
+            <input type="date" id="leave-start" required>
+          </div>
+          <div class="field" style="flex:1;">
+            <label data-i18n="leave.end">วันที่สิ้นสุด *</label>
+            <input type="date" id="leave-end" required>
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="leave.reason">เหตุผล</label>
+          <textarea id="leave-reason" placeholder="ระบุเหตุผลการลา (ถ้ามี)" data-i18n-placeholder="leave.reasonPh"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" id="leave-submit-btn" data-i18n="leave.submit">ส่งคำขอลา</button>
+      </form>
+    </div>
+    <h3 style="margin: 20px 16px 8px;" data-i18n="leave.historyTitle">ประวัติการลาของฉัน</h3>
+    <div id="leave-list" style="padding: 0 16px;"></div>
+
+    <div class="card leave-card" style="margin-top:24px;">
+      <h3 style="margin-top:0;" data-i18n="swap.formTitle">🔄 ขอสลับวันหยุด</h3>
+      <p class="hint" data-i18n="swap.hint">ยื่นคำขอสลับวันหยุดกับวันทำงาน แล้วรอแอดมินอนุมัติ เมื่ออนุมัติแล้วระบบจะจัดการวันทำงาน/วันหยุดให้อัตโนมัติ</p>
+      <form id="swap-request-form">
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;">
+            <label data-i18n="swap.original">วันหยุดเดิม (จะขอมาทำงานแทน) *</label>
+            <input type="date" id="swapreq-original" required>
+          </div>
+          <div class="field" style="flex:1;">
+            <label data-i18n="swap.new">วันที่จะขอหยุดแทน *</label>
+            <input type="date" id="swapreq-new" required>
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="swap.reason">เหตุผล</label>
+          <textarea id="swapreq-reason" placeholder="ระบุเหตุผลการขอสลับ (ถ้ามี)" data-i18n-placeholder="swap.reasonPh"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" id="swap-request-submit-btn" data-i18n="swap.submit">ส่งคำขอสลับวันหยุด</button>
+      </form>
+    </div>
+    <h3 style="margin: 20px 16px 8px;" data-i18n="swap.historyTitle">ประวัติคำขอสลับวันหยุดของฉัน</h3>
+    <div id="swap-request-list" style="padding: 0 16px;"></div>
+  </section>
+
+  <!-- ================= TAB: ทีมของฉัน (เฉพาะหัวหน้าทีม) ================= -->
+  <section id="tab-team" class="tab-panel" style="display:none;">
+    <div class="card">
+      <h3 style="margin-top:0;" id="team-title" data-i18n="team.title">👥 ทีมของฉัน</h3>
+      <div class="filter-bar">
+        <input type="date" id="team-date">
+        <button class="btn btn-secondary btn-sm" id="team-search-btn" data-i18n="common.search">ค้นหา</button>
+      </div>
+    </div>
+    <div class="stat-grid" id="team-stat-grid"></div>
+    <div id="team-list" style="padding: 0 16px;"></div>
+  </section>
+
+  <div class="admin-entry-link">
+    <a href="admin.html" data-i18n="common.adminEntryLink">สำหรับเจ้าหน้าที่: เข้าสู่ระบบแอดมิน →</a>
+  </div>
+
+</div>
+
+<div id="toast-container"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
