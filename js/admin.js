@@ -285,7 +285,9 @@ async function boot() {
   document.getElementById("emp-form").addEventListener("submit", onSaveEmployee);
   document.getElementById("emp-cancel-edit-btn").addEventListener("click", resetEmployeeForm);
   document.getElementById("emp-list-search").addEventListener("input", renderEmployeeList);
-  document.getElementById("emp-dup-filter-btn").addEventListener("click", toggleDupFilter);
+  document.getElementById("emp-view-active-btn").addEventListener("click", () => setEmployeeListView("active"));
+  document.getElementById("emp-view-deleted-btn").addEventListener("click", () => setEmployeeListView("deleted"));
+  document.getElementById("emp-view-dup-btn").addEventListener("click", () => setEmployeeListView("dup"));
   document.getElementById("emp-export-btn").addEventListener("click", exportEmployeesExcel);
   document.getElementById("lq-save-defaults-btn").addEventListener("click", onSaveLeaveQuotaDefaults);
   document.getElementById("lq-apply-all-btn").addEventListener("click", onApplyLeaveQuotaDefaultsToAll);
@@ -457,15 +459,89 @@ function getDepartmentColor(dept) {
   return FALLBACK_DEPT_PALETTE[hash % FALLBACK_DEPT_PALETTE.length];
 }
 
-let showDupOnly = false;
-function toggleDupFilter() {
-  showDupOnly = !showDupOnly;
-  const btn = document.getElementById("emp-dup-filter-btn");
-  if (btn) {
-    btn.classList.toggle("btn-primary", showDupOnly);
-    btn.classList.toggle("btn-outline", !showDupOnly);
-  }
+// มุมมองรายชื่อพนักงาน 3 แบบ: "active" (ใช้งานอยู่ - ค่าเริ่มต้น), "deleted" (ถูกลบ/ปิดใช้งาน แยกหน้าต่างหาก
+// ตามที่ขอ), "dup" (แสดงเฉพาะชื่อซ้ำ เพื่อช่วยไล่เคลียร์ข้อมูลซ้ำที่มีอยู่แล้ว)
+let employeeListView = "active";
+function setEmployeeListView(view) {
+  employeeListView = view;
+  ["active", "deleted", "dup"].forEach((v) => {
+    const btn = document.getElementById(`emp-view-${v}-btn`);
+    if (!btn) return;
+    btn.classList.toggle("btn-primary", v === view);
+    btn.classList.toggle("btn-outline", v !== view);
+  });
   renderEmployeeList();
+}
+
+function renderEmployeeRowHtml(emp, nameCounts) {
+  const shift = getShiftById(shifts, emp.shiftId);
+  const regBadge = emp.lineUserId
+    ? `<span class="badge" style="background:#d1fae5;color:#047857;">🟢 ${bi("ลงทะเบียนแล้ว (LINE)", "Registered (LINE)")}</span>`
+    : emp.claimedByDevice
+    ? `<span class="badge" style="background:#dbeafe;color:#1d4ed8;">🔵 ${bi("ลงทะเบียนแล้ว (อุปกรณ์)", "Registered (device)")}</span>`
+    : `<span class="badge" style="background:#f1f5f9;color:#94a3b8;">⚪ ${bi("ยังไม่ได้ลงทะเบียน", "Not registered yet")}</span>`;
+  const isRegistered = !!(emp.lineUserId || emp.claimedByDevice);
+  const deptColor = getDepartmentColor(emp.department);
+  const deptChip = emp.department
+    ? `<span class="shift-chip" style="background:${deptColor}22; color:${deptColor};"><span class="dot" style="background:${deptColor};"></span>${deptBi(emp.department)}</span>`
+    : `<span class="shift-chip" style="background:#94a3b822; color:#94a3b8;">${bi("ยังไม่ระบุแผนก", "No department")}</span>`;
+  const nameKey = (emp.name || "").trim().toLowerCase();
+  const isDup = emp.active !== false && nameKey && nameCounts[nameKey] > 1;
+  const dupBadge = isDup
+    ? `<span class="badge" style="background:#fef3c7;color:#b45309;" title="${bi(
+        "มีพนักงานคนอื่นใช้ชื่อนี้ซ้ำกัน — ตรวจสอบว่าเป็นคนละคนจริงหรือลงทะเบียนซ้ำโดยไม่ตั้งใจ",
+        "Another active employee shares this exact name — check whether this is a real duplicate registration"
+      )}">⚠️ ${bi("ชื่อซ้ำ", "Duplicate name")} ×${nameCounts[nameKey]}</span>`
+    : "";
+
+  return `
+    <div class="emp-row" style="border-left:4px solid ${deptColor}; padding-left:10px;">
+      <div>
+        <div class="emp-name">
+          ${escapeHtml(emp.name)}
+          ${emp.active === false ? `<span class="badge" style="background:#fee2e2;color:#ef4444;">${bi("ปิดใช้งาน/ลบแล้ว", "Disabled/Deleted")}</span>` : ""}
+          ${emp.teamLeadOf ? `<span class="badge" style="background:#fef3c7;color:#b45309;">⭐ ${bi("หัวหน้าทีม", "Team lead")}</span>` : ""}
+          ${dupBadge}
+          ${regBadge}
+        </div>
+        <div class="emp-meta">
+          ${emp.employeeCode || "-"} • ${deptChip} •
+          ${shift ? `<span class="shift-chip" style="background:${shift.color}22; color:${shift.color};"><span class="dot" style="background:${shift.color};"></span>${shiftNameBi(shift.name)}</span>` : bi("ไม่มีกะ", "No shift")}
+          • ${bi("หยุด", "Off")}${weekdayBi(emp.weeklyDayOff ?? 0)}
+          ${emp.lineUserId ? ` • LINE: ${escapeHtml(emp.lineDisplayName || "-")}` : ""}
+        </div>
+        ${
+          emp.fullName || emp.dob
+            ? `<div class="emp-meta">${emp.fullName ? `${bi("ชื่อจริง", "Full name")}: ${escapeHtml(emp.fullName)}` : ""}${emp.dob ? ` • ${bi("เกิด", "DOB")}: ${formatDateThai(emp.dob)}` : ""}</div>`
+            : ""
+        }
+      </div>
+      <div class="emp-actions">
+        <button class="btn btn-outline btn-sm" data-edit="${emp.id}">${bi("แก้ไข", "Edit")}</button>
+        ${isRegistered ? `<button class="btn btn-outline btn-sm" data-reset-reg="${emp.id}">${bi("ยกเลิกการลงทะเบียน", "Unregister")}</button>` : ""}
+        <button class="btn ${emp.active === false ? "btn-success" : "btn-danger"} btn-sm" data-toggle="${emp.id}" title="${bi("ประวัติการลงเวลา/ลาเดิมจะยังถูกเก็บไว้ ไม่ได้ลบถาวร กู้คืนภายหลังได้", "Old attendance/leave history is kept — not a permanent delete, can be restored later")}">
+          ${emp.active === false ? bi("↩️ กู้คืนพนักงาน", "↩️ Restore employee") : bi("🗑️ ลบพนักงาน", "🗑️ Delete employee")}
+        </button>
+      </div>
+    </div>`;
+}
+
+// จัดกลุ่มพนักงานตามแผนก (เรียงตามลำดับใน DEPARTMENTS ก่อน แล้วตามด้วยแผนกอื่นๆ ที่ไม่อยู่ในลิสต์ ถ้ามี)
+// ภายในแต่ละแผนกเรียงตาม "รหัสพนักงาน" (employeeCode) เพื่อให้ดูเข้าใจง่าย ตามที่ขอ
+function groupByDepartment(list) {
+  const deptOrder = [...DEPARTMENTS];
+  list.forEach((e) => {
+    if (e.department && !deptOrder.includes(e.department)) deptOrder.push(e.department);
+  });
+  if (list.some((e) => !e.department)) deptOrder.push("");
+  return deptOrder
+    .map((dept) => ({
+      dept,
+      list: list
+        .filter((e) => (e.department || "") === dept)
+        .sort((a, b) => (a.employeeCode || "").localeCompare(b.employeeCode || "", "th", { numeric: true }) || (a.name || "").localeCompare(b.name || "", "th")),
+    }))
+    .filter((g) => g.list.length > 0);
 }
 
 function renderEmployeeList() {
@@ -482,73 +558,33 @@ function renderEmployeeList() {
 
   const list = employees
     .filter((e) => !q || (e.name || "").toLowerCase().includes(q) || (e.employeeCode || "").toLowerCase().includes(q))
-    .filter((e) => !showDupOnly || (e.active !== false && nameCounts[(e.name || "").trim().toLowerCase()] > 1))
-    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "th")); // เรียงตามชื่อ ช่วยให้เห็นชื่อซ้ำติดกันง่ายขึ้น
+    .filter((e) => (employeeListView === "deleted" ? e.active === false : e.active !== false))
+    .filter((e) => employeeListView !== "dup" || nameCounts[(e.name || "").trim().toLowerCase()] > 1);
 
   const container = document.getElementById("employee-list");
-  if (showDupOnly && !list.length) {
-    container.innerHTML = `<div class="empty-state"><span class="emoji">🎉</span>${bi(
-      "ไม่พบรายชื่อซ้ำในระบบแล้ว",
-      "No duplicate names found"
-    )}</div>`;
-    return;
-  }
   if (!list.length) {
-    container.innerHTML = `<div class="empty-state"><span class="emoji">👥</span>${bi("ไม่พบพนักงาน", "No employees found")}</div>`;
+    const emptyMsg =
+      employeeListView === "dup"
+        ? { emoji: "🎉", text: bi("ไม่พบรายชื่อซ้ำในระบบแล้ว", "No duplicate names found") }
+        : employeeListView === "deleted"
+        ? { emoji: "🗑️", text: bi("ยังไม่มีพนักงานที่ถูกลบ", "No deleted employees yet") }
+        : { emoji: "👥", text: bi("ไม่พบพนักงาน", "No employees found") };
+    container.innerHTML = `<div class="empty-state"><span class="emoji">${emptyMsg.emoji}</span>${emptyMsg.text}</div>`;
     return;
   }
-  container.innerHTML = list
-    .map((emp) => {
-      const shift = getShiftById(shifts, emp.shiftId);
-      const regBadge = emp.lineUserId
-        ? `<span class="badge" style="background:#d1fae5;color:#047857;">🟢 ${bi("ลงทะเบียนแล้ว (LINE)", "Registered (LINE)")}</span>`
-        : emp.claimedByDevice
-        ? `<span class="badge" style="background:#dbeafe;color:#1d4ed8;">🔵 ${bi("ลงทะเบียนแล้ว (อุปกรณ์)", "Registered (device)")}</span>`
-        : `<span class="badge" style="background:#f1f5f9;color:#94a3b8;">⚪ ${bi("ยังไม่ได้ลงทะเบียน", "Not registered yet")}</span>`;
-      const isRegistered = !!(emp.lineUserId || emp.claimedByDevice);
-      const deptColor = getDepartmentColor(emp.department);
-      const deptChip = emp.department
-        ? `<span class="shift-chip" style="background:${deptColor}22; color:${deptColor};"><span class="dot" style="background:${deptColor};"></span>${deptBi(emp.department)}</span>`
-        : `<span class="shift-chip" style="background:#94a3b822; color:#94a3b8;">${bi("ยังไม่ระบุแผนก", "No department")}</span>`;
-      const nameKey = (emp.name || "").trim().toLowerCase();
-      const isDup = emp.active !== false && nameKey && nameCounts[nameKey] > 1;
-      const dupBadge = isDup
-        ? `<span class="badge" style="background:#fef3c7;color:#b45309;" title="${bi(
-            "มีพนักงานคนอื่นใช้ชื่อนี้ซ้ำกัน — ตรวจสอบว่าเป็นคนละคนจริงหรือลงทะเบียนซ้ำโดยไม่ตั้งใจ",
-            "Another active employee shares this exact name — check whether this is a real duplicate registration"
-          )}">⚠️ ${bi("ชื่อซ้ำ", "Duplicate name")} ×${nameCounts[nameKey]}</span>`
-        : "";
 
+  const groups = groupByDepartment(list);
+  container.innerHTML = groups
+    .map((g) => {
+      const deptColor = getDepartmentColor(g.dept);
+      const deptLabel = g.dept ? deptBi(g.dept) : bi("ยังไม่ระบุแผนก", "No department");
       return `
-        <div class="emp-row" style="border-left:4px solid ${deptColor}; padding-left:10px;">
-          <div>
-            <div class="emp-name">
-              ${escapeHtml(emp.name)}
-              ${emp.active === false ? `<span class="badge" style="background:#fee2e2;color:#ef4444;">${bi("ปิดใช้งาน/ลบแล้ว", "Disabled/Deleted")}</span>` : ""}
-              ${emp.teamLeadOf ? `<span class="badge" style="background:#fef3c7;color:#b45309;">⭐ ${bi("หัวหน้าทีม", "Team lead")}</span>` : ""}
-              ${dupBadge}
-              ${regBadge}
-            </div>
-            <div class="emp-meta">
-              ${emp.employeeCode || "-"} • ${deptChip} •
-              ${shift ? `<span class="shift-chip" style="background:${shift.color}22; color:${shift.color};"><span class="dot" style="background:${shift.color};"></span>${shiftNameBi(shift.name)}</span>` : bi("ไม่มีกะ", "No shift")}
-              • ${bi("หยุด", "Off")}${weekdayBi(emp.weeklyDayOff ?? 0)}
-              ${emp.lineUserId ? ` • LINE: ${escapeHtml(emp.lineDisplayName || "-")}` : ""}
-            </div>
-            ${
-              emp.fullName || emp.dob
-                ? `<div class="emp-meta">${emp.fullName ? `${bi("ชื่อจริง", "Full name")}: ${escapeHtml(emp.fullName)}` : ""}${emp.dob ? ` • ${bi("เกิด", "DOB")}: ${formatDateThai(emp.dob)}` : ""}</div>`
-                : ""
-            }
-          </div>
-          <div class="emp-actions">
-            <button class="btn btn-outline btn-sm" data-edit="${emp.id}">${bi("แก้ไข", "Edit")}</button>
-            ${isRegistered ? `<button class="btn btn-outline btn-sm" data-reset-reg="${emp.id}">${bi("ยกเลิกการลงทะเบียน", "Unregister")}</button>` : ""}
-            <button class="btn ${emp.active === false ? "btn-success" : "btn-danger"} btn-sm" data-toggle="${emp.id}" title="${bi("ประวัติการลงเวลา/ลาเดิมจะยังถูกเก็บไว้ ไม่ได้ลบถาวร กู้คืนภายหลังได้", "Old attendance/leave history is kept — not a permanent delete, can be restored later")}">
-              ${emp.active === false ? bi("↩️ กู้คืนพนักงาน", "↩️ Restore employee") : bi("🗑️ ลบพนักงาน", "🗑️ Delete employee")}
-            </button>
-          </div>
-        </div>`;
+        <div class="dept-group-header" style="border-left:4px solid ${deptColor};">
+          <span class="dot" style="background:${deptColor};"></span>${deptLabel}
+          <span class="dept-group-count">${g.list.length} ${bi("คน", "people")}</span>
+        </div>
+        ${g.list.map((emp) => renderEmployeeRowHtml(emp, nameCounts)).join("")}
+      `;
     })
     .join("");
 
@@ -1191,6 +1227,19 @@ function setupReportDefaults() {
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   document.getElementById("rep-from").value = toInputDate(firstOfMonth);
   document.getElementById("rep-to").value = toInputDate(today);
+
+  // ค่าเริ่มต้นของ "ส่งสรุปเข้า LINE" — วันนี้วันเดียว + ภาพรวมทั้งบริษัท (ปรับเองได้ก่อนกด "ส่ง")
+  document.getElementById("rep-line-from").value = toInputDate(today);
+  document.getElementById("rep-line-to").value = toInputDate(today);
+  fillLineTypeSelect();
+}
+
+function fillLineTypeSelect() {
+  const deptOpts = DEPARTMENTS.map((d) => `<option value="${d}">${bi("เฉพาะแผนก", "Only")} ${deptBi(d)}</option>`).join("");
+  document.getElementById("rep-line-type").innerHTML =
+    `<option value="">${bi("ภาพรวมทั้งบริษัท (ทุกแผนกรวมกัน)", "Company-wide overview (all departments combined)")}</option>` +
+    `<option value="__bydept__">${bi("แยกยอดตามแผนก", "Broken down by department")}</option>` +
+    deptOpts;
 }
 function toInputDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -1429,12 +1478,13 @@ async function exportReportExcel() {
 //  ฟีเจอร์ฟรี ไม่ต้องผูกบัตรเครดิต ฟีเจอร์นี้จึงใช้ได้จากเบราว์เซอร์ทั่วไปด้วย ไม่จำเป็นต้องเปิดผ่านแอป
 //  LINE อีกต่อไป แต่แอดมินคนนั้นต้องเคยกด "🔔 เชื่อมต่อ LINE" ที่แดชบอร์ดไว้ก่อนแล้ว (ดู maybeLinkAdminLine)
 // ============================================================
-async function computeTodaySummary() {
-  const todayStr = toInputDate(new Date());
-  const activeEmployees = employees.filter((e) => e.active !== false);
+// คำนวณสรุปยอดของวันใดวันหนึ่ง (dateStr) — กรองเฉพาะแผนกที่ระบุได้ (deptFilter) เพื่อรองรับ
+// "ส่งสรุปเข้า LINE" แบบเลือกประเภท (ภาพรวม / แยกตามแผนก / เฉพาะแผนกเดียว) และเลือกช่วงวันที่เองได้
+async function computeSummaryForDate(dateStr, deptFilter) {
+  const activeEmployees = employees.filter((e) => e.active !== false && (!deptFilter || e.department === deptFilter));
 
-  const snap = await getDocs(query(collection(db, ATTENDANCE_COLLECTION), where("date", "==", todayStr)));
-  const todayRecords = snap.docs.map((d) => d.data());
+  const snap = await getDocs(query(collection(db, ATTENDANCE_COLLECTION), where("date", "==", dateStr)));
+  const dayRecords = snap.docs.map((d) => d.data());
 
   let checkedIn = 0;
   let checkedOut = 0;
@@ -1446,26 +1496,26 @@ async function computeTodaySummary() {
   const lateNames = [];
 
   activeEmployees.forEach((emp) => {
-    const isOnLeaveToday = leaves.some(
+    const isOnLeaveThatDay = leaves.some(
       (l) =>
         l.employeeId === emp.id &&
         l.status === LEAVE_STATUS.APPROVED &&
-        l.startDate <= todayStr &&
-        l.endDate >= todayStr
+        l.startDate <= dateStr &&
+        l.endDate >= dateStr
     );
-    if (isOnLeaveToday) {
+    if (isOnLeaveThatDay) {
       onLeave++;
       return;
     }
 
-    const dayFlags = getDayFlags({ date: todayStr, employee: emp, holidays, swaps });
+    const dayFlags = getDayFlags({ date: dateStr, employee: emp, holidays, swaps });
     const dayCategory = classifyDay(dayFlags);
     if (dayCategory === "holiday" || dayCategory === "restday") {
       dayOff++;
       return;
     }
 
-    const record = todayRecords.find((r) => r.employeeId === emp.id);
+    const record = dayRecords.find((r) => r.employeeId === emp.id);
     const events = record?.events || [];
     const hasIn = events.some((e) => e.type === "in");
     const hasOut = events.some((e) => e.type === "out");
@@ -1473,7 +1523,7 @@ async function computeTodaySummary() {
     if (hasIn) {
       checkedIn++;
       const shift = getShiftById(shifts, emp.shiftId);
-      const summary = summarizeDay({ events, shift, dayFlags, otRules: OT_RULES, shiftDate: todayStr });
+      const summary = summarizeDay({ events, shift, dayFlags, otRules: OT_RULES, shiftDate: dateStr });
       if (summary.isLate) {
         lateCount++;
         lateNames.push(emp.name);
@@ -1485,7 +1535,7 @@ async function computeTodaySummary() {
   });
 
   return {
-    todayStr,
+    dateStr,
     total: activeEmployees.length,
     checkedIn,
     checkedOut,
@@ -1498,10 +1548,57 @@ async function computeTodaySummary() {
   };
 }
 
+const LINE_SUMMARY_DIVIDER = "----------------------------";
+
+// แปลงผลสรุป 1 วัน (ของ 1 แผนก หรือภาพรวม) เป็นข้อความสั้นๆ ไม่มีหัวข้อวันที่ (ใส่หัวข้อวันที่ครอบไว้ด้านนอกอีกที)
+function formatSummaryBlock(s, label) {
+  const pct = s.total ? Math.round((s.checkedIn / s.total) * 100) : 0;
+  let text = label ? `▸ ${label}\n` : "";
+  text += `👥 พนักงานทั้งหมด / Total: ${s.total} คน\n`;
+  text += `🟢 เช็คอินแล้ว / Checked in: ${s.checkedIn} คน (${pct}%)\n`;
+  text += `🔴 เช็คเอาท์แล้ว / Checked out: ${s.checkedOut} คน\n`;
+  text += `🌴 ลา / On leave: ${s.onLeave} คน\n`;
+  text += `📅 วันหยุด / Day off: ${s.dayOff} คน\n`;
+  text += `⚠️ มาสาย / Late: ${s.lateCount} คน`;
+  if (s.lateNames.length) text += ` (${s.lateNames.join(", ")})`;
+  text += `\n❌ ยังไม่มาลงเวลา / Not clocked in: ${s.absent} คน`;
+  if (s.absentNames.length) text += ` (${s.absentNames.join(", ")})`;
+  return text;
+}
+
+// รายชื่อวันที่ทั้งหมดระหว่าง from-to (รวมปลายทั้งสองข้าง) เป็น array ของ "YYYY-MM-DD"
+function dateRangeList(fromStr, toStr) {
+  const dates = [];
+  let cur = new Date(fromStr + "T00:00:00");
+  const end = new Date(toStr + "T00:00:00");
+  while (cur <= end) {
+    dates.push(toInputDate(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
 async function sendDailySummaryToLine() {
   const btn = document.getElementById("rep-send-line-btn");
   if (!admin || !admin.id) {
     showToast(bi("❌ ไม่พบข้อมูลแอดมินปัจจุบัน", "❌ Could not identify the current admin"));
+    return;
+  }
+
+  const fromStr = document.getElementById("rep-line-from").value;
+  const toStr = document.getElementById("rep-line-to").value || fromStr;
+  const typeVal = document.getElementById("rep-line-type").value; // "" = ภาพรวม, "__bydept__" = แยกตามแผนก, หรือชื่อแผนก
+  if (!fromStr) {
+    showToast(bi("❌ กรุณาเลือกวันที่ก่อน", "❌ Please select a date first"));
+    return;
+  }
+  if (toStr < fromStr) {
+    showToast(bi("❌ วันที่ 'ถึง' ต้องไม่ก่อนวันที่ 'จาก'", "❌ The 'to' date must not be before the 'from' date"));
+    return;
+  }
+  const dates = dateRangeList(fromStr, toStr);
+  if (dates.length > 31) {
+    showToast(bi("❌ เลือกช่วงวันที่ได้สูงสุด 31 วันต่อครั้ง", "❌ You can select up to 31 days at a time"), 4000);
     return;
   }
 
@@ -1510,25 +1607,34 @@ async function sendDailySummaryToLine() {
   btn.textContent = bi("กำลังสรุปข้อมูล...", "Summarizing data...");
 
   try {
-    const s = await computeTodaySummary();
-    const DIVIDER = "----------------------------";
-    const pct = s.total ? Math.round((s.checkedIn / s.total) * 100) : 0;
-    let text = `📊 สรุปการเข้างานประจำวันที่ ${formatDateThai(s.todayStr)}\n${DIVIDER}\n`;
-    text += `👥 พนักงานทั้งหมด / Total: ${s.total} คน\n`;
-    text += `🟢 เช็คอินแล้ว / Checked in: ${s.checkedIn} คน (${pct}%)\n`;
-    text += `🔴 เช็คเอาท์แล้ว / Checked out: ${s.checkedOut} คน\n`;
-    text += `🌴 ลาวันนี้ / On leave: ${s.onLeave} คน\n`;
-    text += `📅 วันหยุดวันนี้ / Day off: ${s.dayOff} คน\n`;
-    text += `${DIVIDER}\n`;
-    text += `⚠️ มาสาย / Late: ${s.lateCount} คน\n`;
-    if (s.lateNames.length) text += `   • ${s.lateNames.join("\n   • ")}\n`;
-    text += `❌ ยังไม่มาลงเวลา / Not clocked in: ${s.absent} คน\n`;
-    if (s.absentNames.length) text += `   • ${s.absentNames.join("\n   • ")}\n`;
-    text += `${DIVIDER}\n`;
-    text += `✍️ ส่งโดย / Sent by: ${admin.name}`;
+    const typeHeaderTh =
+      typeVal === "__bydept__" ? "แยกยอดตามแผนก" : typeVal ? `เฉพาะแผนก ${typeVal}` : "ภาพรวมทั้งบริษัท";
+    const typeHeaderEn =
+      typeVal === "__bydept__" ? "By department" : typeVal ? `${typeVal} department only` : "Company-wide";
+
+    const dayBlocks = [];
+    for (const dateStr of dates) {
+      let block = `🗓️ ${formatDateThai(dateStr)}\n${LINE_SUMMARY_DIVIDER}\n`;
+      if (typeVal === "__bydept__") {
+        const perDept = [];
+        for (const dept of DEPARTMENTS) {
+          const s = await computeSummaryForDate(dateStr, dept);
+          if (s.total > 0) perDept.push(formatSummaryBlock(s, dept));
+        }
+        block += perDept.length ? perDept.join(`\n${LINE_SUMMARY_DIVIDER}\n`) : bi("ไม่มีข้อมูลพนักงานตามแผนก", "No department data");
+      } else {
+        const s = await computeSummaryForDate(dateStr, typeVal || null);
+        block += formatSummaryBlock(s, null);
+      }
+      dayBlocks.push(block);
+    }
+
+    let text = `📊 สรุปการเข้างาน (${bi(typeHeaderTh, typeHeaderEn)})\n${LINE_SUMMARY_DIVIDER}\n`;
+    text += dayBlocks.join(`\n${LINE_SUMMARY_DIVIDER}\n`);
+    text += `\n${LINE_SUMMARY_DIVIDER}\n✍️ ส่งโดย / Sent by: ${admin.name}`;
 
     await sendAdminOwnLinePush(admin.id, text);
-    showToast(bi("✅ ส่งสรุปประจำวันเข้า LINE ส่วนตัวของคุณแล้ว", "✅ Daily summary sent to your personal LINE chat"));
+    showToast(bi("✅ ส่งสรุปเข้า LINE ส่วนตัวของคุณแล้ว", "✅ Summary sent to your personal LINE chat"));
   } catch (e) {
     console.error(e);
     if (e && e.message === "NOT_LINKED") {

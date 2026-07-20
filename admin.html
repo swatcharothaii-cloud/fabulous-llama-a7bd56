@@ -75,8 +75,28 @@
         <select id="rep-employee"><option value="" data-i18n="rep.allEmployees">พนักงานทั้งหมด</option></select>
         <button class="btn btn-secondary btn-sm" id="rep-search-btn" data-i18n="common.search">ค้นหา</button>
         <button class="btn btn-outline btn-sm" id="rep-export-btn" data-i18n="rep.export">📊 ส่งออก Excel</button>
-        <button class="btn btn-outline btn-sm" id="rep-send-line-btn" data-i18n="rep.sendLine">📤 ส่งสรุปวันนี้เข้า LINE</button>
       </div>
+    </div>
+
+    <!-- ================= ส่งสรุปเข้า LINE — เลือกได้ว่าอยากได้ประเภทสรุปแบบไหน และวันที่ไหนบ้าง ================= -->
+    <div class="card">
+      <h3 style="margin-top:0;" data-i18n="rep.lineSummaryTitle">📤 ส่งสรุปเข้า LINE</h3>
+      <div class="filter-bar">
+        <div class="field" style="margin-bottom:0;">
+          <label data-i18n="rep.lineDateFrom">วันที่ (จาก)</label>
+          <input type="date" id="rep-line-from">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label data-i18n="rep.lineDateTo">วันที่ (ถึง)</label>
+          <input type="date" id="rep-line-to">
+        </div>
+        <div class="field" style="margin-bottom:0; flex:1; min-width:180px;">
+          <label data-i18n="rep.lineType">ประเภทสรุป</label>
+          <select id="rep-line-type"></select>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" id="rep-send-line-btn" data-i18n="rep.sendLine">📤 ส่งสรุปเข้า LINE</button>
+      <p class="hint" style="margin-top:8px;" data-i18n="rep.lineSummaryHint">เลือกช่วงวันที่ได้สูงสุด 31 วันต่อครั้ง (ถ้าเลือกวันเดียว จะได้สรุปแบบละเอียดของวันนั้น ถ้าเลือกหลายวัน จะได้สรุปแยกเป็นรายวัน)</p>
     </div>
 
     <div class="table-wrap">
@@ -156,10 +176,14 @@
     </div>
 
     <div class="card" style="margin-bottom:8px;">
-      <div class="filter-bar" style="margin-bottom:0;">
+      <div class="filter-bar" style="margin-bottom:10px;">
         <input type="text" id="emp-list-search" placeholder="🔍 ค้นหาพนักงาน..." data-i18n-placeholder="emp.searchPh" style="flex:1;">
-        <button type="button" class="btn btn-outline btn-sm" id="emp-dup-filter-btn" style="white-space:nowrap;" data-i18n="emp.dupFilterBtn">⚠️ แสดงเฉพาะชื่อซ้ำ</button>
         <button class="btn btn-outline btn-sm" id="emp-export-btn" style="white-space:nowrap;" data-i18n="emp.exportBtn">📊 ส่งออกรายชื่อ (Excel)</button>
+      </div>
+      <div class="filter-bar" style="margin-bottom:0;">
+        <button type="button" class="btn btn-primary btn-sm" id="emp-view-active-btn" data-i18n="emp.viewActive">👥 พนักงานที่ใช้งานอยู่</button>
+        <button type="button" class="btn btn-outline btn-sm" id="emp-view-deleted-btn" data-i18n="emp.viewDeleted">🗑️ รายชื่อที่ถูกลบ</button>
+        <button type="button" class="btn btn-outline btn-sm" id="emp-view-dup-btn" data-i18n="emp.dupFilterBtn">⚠️ แสดงเฉพาะชื่อซ้ำ</button>
       </div>
     </div>
     <div id="employee-list" style="padding: 0 16px;"></div>
