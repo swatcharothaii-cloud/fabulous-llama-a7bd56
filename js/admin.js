@@ -3,6 +3,7 @@ import {
   ADMINS,
   COMPANY,
   DEPARTMENTS,
+  DEPARTMENT_COLORS,
   SHIFTS,
   OT_RULES,
   LEAVE_STATUS,
@@ -284,6 +285,7 @@ async function boot() {
   document.getElementById("emp-form").addEventListener("submit", onSaveEmployee);
   document.getElementById("emp-cancel-edit-btn").addEventListener("click", resetEmployeeForm);
   document.getElementById("emp-list-search").addEventListener("input", renderEmployeeList);
+  document.getElementById("emp-dup-filter-btn").addEventListener("click", toggleDupFilter);
   document.getElementById("emp-export-btn").addEventListener("click", exportEmployeesExcel);
   document.getElementById("lq-save-defaults-btn").addEventListener("click", onSaveLeaveQuotaDefaults);
   document.getElementById("lq-apply-all-btn").addEventListener("click", onApplyLeaveQuotaDefaultsToAll);
@@ -444,12 +446,53 @@ function setLeaveQuotaFormFields(quota) {
   });
 }
 
+// สีประจำแผนก — ใช้สีที่กำหนดไว้ใน config.js ถ้ามี ถ้าไม่มี (แผนกใหม่ที่เพิ่งเพิ่ม) จะสุ่มสีให้คงที่
+// จากชื่อแผนกเอง (hash ง่ายๆ) เพื่อให้พนักงานแผนกเดียวกันเห็นสีเดียวกันเสมอ ไม่เปลี่ยนไปมาทุกครั้งที่โหลดหน้า
+const FALLBACK_DEPT_PALETTE = ["#0ea5e9", "#f59e0b", "#8b5cf6", "#10b981", "#ec4899", "#ef4444", "#6366f1", "#14b8a6"];
+function getDepartmentColor(dept) {
+  if (!dept) return "#94a3b8";
+  if (DEPARTMENT_COLORS[dept]) return DEPARTMENT_COLORS[dept];
+  let hash = 0;
+  for (let i = 0; i < dept.length; i++) hash = (hash * 31 + dept.charCodeAt(i)) >>> 0;
+  return FALLBACK_DEPT_PALETTE[hash % FALLBACK_DEPT_PALETTE.length];
+}
+
+let showDupOnly = false;
+function toggleDupFilter() {
+  showDupOnly = !showDupOnly;
+  const btn = document.getElementById("emp-dup-filter-btn");
+  if (btn) {
+    btn.classList.toggle("btn-primary", showDupOnly);
+    btn.classList.toggle("btn-outline", !showDupOnly);
+  }
+  renderEmployeeList();
+}
+
 function renderEmployeeList() {
   const q = (document.getElementById("emp-list-search").value || "").trim().toLowerCase();
-  const list = employees.filter(
-    (e) => !q || (e.name || "").toLowerCase().includes(q) || (e.employeeCode || "").toLowerCase().includes(q)
-  );
+
+  // นับจำนวนพนักงานที่ใช้งานอยู่ (ไม่ปิดใช้งาน) ที่มีชื่อซ้ำกัน — ใช้เตือนแอดมินว่ามีรายชื่อซ้ำในระบบ
+  const nameCounts = {};
+  employees
+    .filter((e) => e.active !== false)
+    .forEach((e) => {
+      const key = (e.name || "").trim().toLowerCase();
+      if (key) nameCounts[key] = (nameCounts[key] || 0) + 1;
+    });
+
+  const list = employees
+    .filter((e) => !q || (e.name || "").toLowerCase().includes(q) || (e.employeeCode || "").toLowerCase().includes(q))
+    .filter((e) => !showDupOnly || (e.active !== false && nameCounts[(e.name || "").trim().toLowerCase()] > 1))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "th")); // เรียงตามชื่อ ช่วยให้เห็นชื่อซ้ำติดกันง่ายขึ้น
+
   const container = document.getElementById("employee-list");
+  if (showDupOnly && !list.length) {
+    container.innerHTML = `<div class="empty-state"><span class="emoji">🎉</span>${bi(
+      "ไม่พบรายชื่อซ้ำในระบบแล้ว",
+      "No duplicate names found"
+    )}</div>`;
+    return;
+  }
   if (!list.length) {
     container.innerHTML = `<div class="empty-state"><span class="emoji">👥</span>${bi("ไม่พบพนักงาน", "No employees found")}</div>`;
     return;
@@ -463,18 +506,31 @@ function renderEmployeeList() {
         ? `<span class="badge" style="background:#dbeafe;color:#1d4ed8;">🔵 ${bi("ลงทะเบียนแล้ว (อุปกรณ์)", "Registered (device)")}</span>`
         : `<span class="badge" style="background:#f1f5f9;color:#94a3b8;">⚪ ${bi("ยังไม่ได้ลงทะเบียน", "Not registered yet")}</span>`;
       const isRegistered = !!(emp.lineUserId || emp.claimedByDevice);
+      const deptColor = getDepartmentColor(emp.department);
+      const deptChip = emp.department
+        ? `<span class="shift-chip" style="background:${deptColor}22; color:${deptColor};"><span class="dot" style="background:${deptColor};"></span>${deptBi(emp.department)}</span>`
+        : `<span class="shift-chip" style="background:#94a3b822; color:#94a3b8;">${bi("ยังไม่ระบุแผนก", "No department")}</span>`;
+      const nameKey = (emp.name || "").trim().toLowerCase();
+      const isDup = emp.active !== false && nameKey && nameCounts[nameKey] > 1;
+      const dupBadge = isDup
+        ? `<span class="badge" style="background:#fef3c7;color:#b45309;" title="${bi(
+            "มีพนักงานคนอื่นใช้ชื่อนี้ซ้ำกัน — ตรวจสอบว่าเป็นคนละคนจริงหรือลงทะเบียนซ้ำโดยไม่ตั้งใจ",
+            "Another active employee shares this exact name — check whether this is a real duplicate registration"
+          )}">⚠️ ${bi("ชื่อซ้ำ", "Duplicate name")} ×${nameCounts[nameKey]}</span>`
+        : "";
 
       return `
-        <div class="emp-row">
+        <div class="emp-row" style="border-left:4px solid ${deptColor}; padding-left:10px;">
           <div>
             <div class="emp-name">
               ${escapeHtml(emp.name)}
-              ${emp.active === false ? `<span class="badge" style="background:#fee2e2;color:#ef4444;">${bi("ปิดใช้งาน", "Disabled")}</span>` : ""}
+              ${emp.active === false ? `<span class="badge" style="background:#fee2e2;color:#ef4444;">${bi("ปิดใช้งาน/ลบแล้ว", "Disabled/Deleted")}</span>` : ""}
               ${emp.teamLeadOf ? `<span class="badge" style="background:#fef3c7;color:#b45309;">⭐ ${bi("หัวหน้าทีม", "Team lead")}</span>` : ""}
+              ${dupBadge}
               ${regBadge}
             </div>
             <div class="emp-meta">
-              ${emp.employeeCode || "-"} • ${emp.department ? deptBi(emp.department) : bi("ยังไม่ระบุแผนก", "No department")} •
+              ${emp.employeeCode || "-"} • ${deptChip} •
               ${shift ? `<span class="shift-chip" style="background:${shift.color}22; color:${shift.color};"><span class="dot" style="background:${shift.color};"></span>${shiftNameBi(shift.name)}</span>` : bi("ไม่มีกะ", "No shift")}
               • ${bi("หยุด", "Off")}${weekdayBi(emp.weeklyDayOff ?? 0)}
               ${emp.lineUserId ? ` • LINE: ${escapeHtml(emp.lineDisplayName || "-")}` : ""}
@@ -488,8 +544,8 @@ function renderEmployeeList() {
           <div class="emp-actions">
             <button class="btn btn-outline btn-sm" data-edit="${emp.id}">${bi("แก้ไข", "Edit")}</button>
             ${isRegistered ? `<button class="btn btn-outline btn-sm" data-reset-reg="${emp.id}">${bi("ยกเลิกการลงทะเบียน", "Unregister")}</button>` : ""}
-            <button class="btn ${emp.active === false ? "btn-success" : "btn-danger"} btn-sm" data-toggle="${emp.id}">
-              ${emp.active === false ? bi("เปิดใช้งาน", "Enable") : bi("ปิดใช้งาน", "Disable")}
+            <button class="btn ${emp.active === false ? "btn-success" : "btn-danger"} btn-sm" data-toggle="${emp.id}" title="${bi("ประวัติการลงเวลา/ลาเดิมจะยังถูกเก็บไว้ ไม่ได้ลบถาวร กู้คืนภายหลังได้", "Old attendance/leave history is kept — not a permanent delete, can be restored later")}">
+              ${emp.active === false ? bi("↩️ กู้คืนพนักงาน", "↩️ Restore employee") : bi("🗑️ ลบพนักงาน", "🗑️ Delete employee")}
             </button>
           </div>
         </div>`;
@@ -558,6 +614,17 @@ function startEditEmployee(id) {
 async function toggleEmployeeActive(id) {
   const emp = employees.find((e) => e.id === id);
   if (!emp) return;
+  // ยืนยันก่อน "ลบ" (ปิดใช้งาน) ทุกครั้ง กันกดพลาด — ไม่ต้องยืนยันตอนกด "กู้คืน" กลับมา
+  if (
+    emp.active !== false &&
+    !confirm(
+      bi(
+        `ลบพนักงาน "${emp.name}" ออกจากรายชื่อที่ใช้งานใช่หรือไม่?\n\nประวัติการลงเวลา/การลาเดิมของพนักงานคนนี้จะยังถูกเก็บไว้ครบ (ไม่ได้ลบถาวร) และสามารถกด "กู้คืนพนักงาน" ภายหลังได้`,
+        `Delete employee "${emp.name}" from the active list?\n\nTheir existing attendance/leave history will be kept (not permanently deleted) and can be restored later via "Restore employee"`
+      )
+    )
+  )
+    return;
   try {
     await updateDoc(doc(db, EMPLOYEES_COLLECTION, id), {
       active: emp.active === false ? true : false,
@@ -1444,15 +1511,21 @@ async function sendDailySummaryToLine() {
 
   try {
     const s = await computeTodaySummary();
-    let text = `📊 สรุปการเข้างานประจำวันที่ ${formatDateThai(s.todayStr)}\n`;
-    text += `พนักงานทั้งหมด: ${s.total} คน\n`;
-    text += `🟢 เช็คอินแล้ว: ${s.checkedIn} คน\n`;
-    text += `🔴 เช็คเอาท์แล้ว: ${s.checkedOut} คน\n`;
-    text += `🌴 ลาวันนี้: ${s.onLeave} คน\n`;
-    text += `📅 วันหยุดวันนี้: ${s.dayOff} คน\n`;
-    text += `⚠️ มาสาย: ${s.lateCount} คน${s.lateNames.length ? " (" + s.lateNames.join(", ") + ")" : ""}\n`;
-    text += `❌ ยังไม่มาลงเวลา: ${s.absent} คน${s.absentNames.length ? " (" + s.absentNames.join(", ") + ")" : ""}\n`;
-    text += `\nส่งโดย: ${admin.name}`;
+    const DIVIDER = "----------------------------";
+    const pct = s.total ? Math.round((s.checkedIn / s.total) * 100) : 0;
+    let text = `📊 สรุปการเข้างานประจำวันที่ ${formatDateThai(s.todayStr)}\n${DIVIDER}\n`;
+    text += `👥 พนักงานทั้งหมด / Total: ${s.total} คน\n`;
+    text += `🟢 เช็คอินแล้ว / Checked in: ${s.checkedIn} คน (${pct}%)\n`;
+    text += `🔴 เช็คเอาท์แล้ว / Checked out: ${s.checkedOut} คน\n`;
+    text += `🌴 ลาวันนี้ / On leave: ${s.onLeave} คน\n`;
+    text += `📅 วันหยุดวันนี้ / Day off: ${s.dayOff} คน\n`;
+    text += `${DIVIDER}\n`;
+    text += `⚠️ มาสาย / Late: ${s.lateCount} คน\n`;
+    if (s.lateNames.length) text += `   • ${s.lateNames.join("\n   • ")}\n`;
+    text += `❌ ยังไม่มาลงเวลา / Not clocked in: ${s.absent} คน\n`;
+    if (s.absentNames.length) text += `   • ${s.absentNames.join("\n   • ")}\n`;
+    text += `${DIVIDER}\n`;
+    text += `✍️ ส่งโดย / Sent by: ${admin.name}`;
 
     await sendAdminOwnLinePush(admin.id, text);
     showToast(bi("✅ ส่งสรุปประจำวันเข้า LINE ส่วนตัวของคุณแล้ว", "✅ Daily summary sent to your personal LINE chat"));

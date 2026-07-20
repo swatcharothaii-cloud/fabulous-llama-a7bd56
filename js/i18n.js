@@ -53,6 +53,13 @@ const DICT = {
   "reg.nicknamePh": ["เช่น ชาย", "e.g. John"],
   "reg.dob": ["วันเดือนปีเกิด *", "Date of birth *"],
   "reg.submit": ["✅ ลงทะเบียน", "✅ Register"],
+  "reg.searchLabel": ["🔍 ค้นหาชื่อของคุณจากรายชื่อพนักงาน", "🔍 Search your name from the employee list"],
+  "reg.searchPh": ["พิมพ์ชื่อเพื่อค้นหา...", "Type your name to search..."],
+  "reg.notInList": ["ไม่เจอชื่อของคุณ?", "Don't see your name?"],
+  "reg.registerNewLink": ["ลงทะเบียนพนักงานใหม่", "Register as a new employee"],
+  "reg.backToSelectLink": ["← กลับไปเลือกชื่อจากรายชื่อเดิม", "← Back to selecting from the list"],
+  "reg.noUnclaimed": ["ยังไม่มีรายชื่อพนักงานที่ยังไม่ถูกจับคู่ในระบบ กรุณาลงทะเบียนใหม่ด้านล่าง", "No unclaimed employee names available. Please register below."],
+  "reg.noMatch": ["ไม่พบชื่อที่ค้นหา", "No matching name found"],
   "app.header": ["⏰ ระบบลงเวลาทำงาน", "⏰ Attendance System"],
 
   // ---- แท็บฝั่งพนักงาน ----
@@ -148,6 +155,7 @@ const DICT = {
     'Appoint as team lead for this department (will see the "My Team" tab and get notified when the team checks in/out)',
   ],
   "emp.searchPh": ["🔍 ค้นหาพนักงาน...", "🔍 Search employees..."],
+  "emp.dupFilterBtn": ["⚠️ แสดงเฉพาะชื่อซ้ำ", "⚠️ Show duplicates only"],
   "emp.exportBtn": ["📊 ส่งออกรายชื่อ (Excel)", "📊 Export list (Excel)"],
   "emp.quotaTitle": ["โควต้าวันลาต่อปีของพนักงานคนนี้", "Annual leave quota for this employee"],
   "emp.quotaHint": [

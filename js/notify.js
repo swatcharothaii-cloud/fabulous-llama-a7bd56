@@ -78,35 +78,58 @@ async function sendLinePush(to, text) {
 
 function formatBangkokDateTime(d) {
   const dateStr = d.toLocaleDateString("th-TH", { timeZone: "Asia/Bangkok", year: "numeric", month: "long", day: "numeric" });
+  const weekdayStr = d.toLocaleDateString("th-TH", { timeZone: "Asia/Bangkok", weekday: "long" });
   const timeStr = d.toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" });
-  return { dateStr, timeStr };
+  return { dateStr, weekdayStr, timeStr };
+}
+
+const DIVIDER = "----------------------------";
+
+// เทียบเวลาเช็คอินจริง (HH:mm ตามเวลากรุงเทพฯ) กับเวลาเริ่มกะ เพื่อบอกว่า "มาสาย" หรือไม่ — เป็นการเทียบ
+// แบบง่าย (ไม่ได้คำนวณ OT/กะข้ามเที่ยงคืนแบบละเอียดเหมือน ot-calc.js) แค่ใช้ประกอบข้อความแจ้งเตือนเท่านั้น
+function computeLateInfo(eventTime, shift) {
+  if (!shift || !shift.start) return null;
+  const hhmm = eventTime.toLocaleTimeString("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hour12: false });
+  return { isLate: hhmm > shift.start, actualHHMM: hhmm, shiftStart: shift.start };
 }
 
 // ---------- 1) เช็คอิน / เช็คเอาท์ ----------
-export async function notifyAttendanceEvent(employee, isIn, eventTime, pos) {
-  const { timeStr } = formatBangkokDateTime(eventTime);
+export async function notifyAttendanceEvent(employee, isIn, eventTime, pos, shift) {
+  const { dateStr, weekdayStr, timeStr } = formatBangkokDateTime(eventTime);
+  const lateInfo = isIn ? computeLateInfo(eventTime, shift) : null;
 
-  // 1a) แจ้งเตือน "ตัวเอง" — ข้อความ 2 ภาษา ไทย/อังกฤษ
+  // 1a) แจ้งเตือน "ตัวเอง" — ข้อความ 2 ภาษา ไทย/อังกฤษ อ่านง่าย มีรายละเอียดกะ/เวลาที่ควรเข้า
   if (employee.lineUserId) {
-    const selfText = isIn
-      ? `ระบบบันทึกเวลาเข้างานเรียบร้อยแล้ว วันนี้ เวลา ${timeStr} น.\nCheck-in recorded successfully. Today at ${timeStr}.`
-      : `ระบบบันทึกเวลาเลิกงานเรียบร้อยแล้ว วันนี้ เวลา ${timeStr} น.\nCheck-out recorded successfully. Today at ${timeStr}.`;
+    const headLine = isIn
+      ? `✅ บันทึกเวลาเข้างานสำเร็จ / Check-in recorded`
+      : `✅ บันทึกเวลาเลิกงานสำเร็จ / Check-out recorded`;
+    let selfText =
+      `${headLine}\n${DIVIDER}\n` +
+      `🗓️ วันที่ / Date: ${dateStr} (${weekdayStr})\n` +
+      `⏰ เวลา / Time: ${timeStr} น.`;
+    if (shift && shift.name) selfText += `\n🕒 กะ / Shift: ${shift.name} (${shift.start}-${shift.end})`;
+    if (isIn && lateInfo && lateInfo.isLate) {
+      selfText += `\n⚠️ มาสาย (เวลาเริ่มกะ ${lateInfo.shiftStart} น.) / Late (shift starts at ${lateInfo.shiftStart})`;
+    }
     sendLinePush(employee.lineUserId, selfText);
   }
 
-  // 1b) แจ้งเตือนหัวหน้าทีมของแผนกนี้ + แอดมิน HR ทุกคน
+  // 1b) แจ้งเตือนหัวหน้าทีมของแผนกนี้ + แอดมิน HR ทุกคน — รายงานอ่านง่าย มีหัวข้อ/คั่นบรรทัดชัดเจน
   const recipients = await getBroadcastRecipients(employee.department, employee.id);
   if (recipients.length) {
-    const { dateStr } = formatBangkokDateTime(eventTime);
     const label = isIn ? "🟢 เช็คอิน / Check-in" : "🔴 เช็คเอาท์ / Check-out";
     let text =
-      `${label}\n` +
-      `พนักงาน / Employee: ${employee.name}\n` +
-      `แผนก / Department: ${employee.department || "-"}\n` +
-      `วันที่ / Date: ${dateStr}\n` +
-      `เวลา / Time: ${timeStr} น.`;
+      `${label}\n${DIVIDER}\n` +
+      `👤 พนักงาน / Employee: ${employee.name}\n` +
+      `🏢 แผนก / Department: ${employee.department || "-"}\n` +
+      `🗓️ วันที่ / Date: ${dateStr} (${weekdayStr})\n` +
+      `⏰ เวลา / Time: ${timeStr} น.`;
+    if (shift && shift.name) text += `\n🕒 กะ / Shift: ${shift.name} (${shift.start}-${shift.end})`;
+    if (isIn && lateInfo && lateInfo.isLate) {
+      text += `\n⚠️ มาสาย / Late arrival`;
+    }
     if (pos && pos.lat != null && pos.lng != null) {
-      text += `\nตำแหน่ง / Location: https://www.google.com/maps?q=${pos.lat},${pos.lng}`;
+      text += `\n📍 ตำแหน่ง / Location: https://www.google.com/maps?q=${pos.lat},${pos.lng}`;
     }
     sendLinePush(recipients, text);
   }
@@ -117,23 +140,34 @@ export async function notifyLeaveCreated(leave, employee) {
   const recipients = await getBroadcastRecipients(employee.department, employee.id);
   if (!recipients.length) return;
   const text =
-    `🌴 มีคำขอลาใหม่ / New leave request\n` +
-    `พนักงาน / Employee: ${leave.employeeName || employee.name || "-"}\n` +
-    `ประเภท / Type: ${leave.typeLabel || leave.typeId || "-"}\n` +
-    `วันที่ / Dates: ${leave.startDate} - ${leave.endDate} (${leave.days || "-"} วัน/day(s))\n` +
-    (leave.reason ? `เหตุผล / Reason: ${leave.reason}\n` : "") +
-    `สถานะ / Status: รออนุมัติ / Pending`;
+    `🌴 มีคำขอลาใหม่ (รออนุมัติ) / New leave request (Pending)\n${DIVIDER}\n` +
+    `👤 พนักงาน / Employee: ${leave.employeeName || employee.name || "-"}\n` +
+    `🏢 แผนก / Department: ${employee.department || "-"}\n` +
+    `📋 ประเภท / Type: ${leave.typeLabel || leave.typeId || "-"}\n` +
+    `🗓️ ช่วงวันที่ / Dates: ${leave.startDate} ถึง / to ${leave.endDate}\n` +
+    `🔢 จำนวน / Total: ${leave.days || "-"} วัน / day(s)\n` +
+    `📝 เหตุผล / Reason: ${leave.reason || "-"}\n` +
+    `${DIVIDER}\n` +
+    `👉 กรุณาเข้าแอปหน้าแอดมินเพื่อพิจารณาอนุมัติ / Please open the admin app to review this request`;
   sendLinePush(recipients, text);
 }
 
 // ---------- 3) พิจารณาคำขอลา (อนุมัติ/ไม่อนุมัติ) ----------
 export async function notifyLeaveReviewed(leave, employee, isApproved, reviewedBy) {
-  // 3a) แจ้งเตือนตัวพนักงานเจ้าของคำขอลา — ข้อความ 2 ภาษา ไทย/อังกฤษ
+  // 3a) แจ้งเตือนตัวพนักงานเจ้าของคำขอลา — ข้อความ 2 ภาษา ไทย/อังกฤษ อ่านง่าย มีรายละเอียดครบ
   if (employee && employee.lineUserId) {
-    const selfText = isApproved
-      ? `คำขอลาของคุณได้รับการอนุมัติเรียบร้อยแล้ว\nYour leave request has been approved.`
-      : `คำขอลาของคุณในวันที่ ${leave.startDate} - ${leave.endDate} ไม่ได้รับการอนุมัติ กรุณาติดต่อฝ่าย HR หรือหัวหน้างาน\n` +
-        `Your leave request for ${leave.startDate} - ${leave.endDate} was not approved. Please contact HR or your supervisor.`;
+    const headLine = isApproved
+      ? `✅ คำขอลาของคุณได้รับการอนุมัติ / Your leave request was approved`
+      : `❌ คำขอลาของคุณไม่ได้รับการอนุมัติ / Your leave request was not approved`;
+    let selfText =
+      `${headLine}\n${DIVIDER}\n` +
+      `📋 ประเภท / Type: ${leave.typeLabel || leave.typeId || "-"}\n` +
+      `🗓️ ช่วงวันที่ / Dates: ${leave.startDate} ถึง / to ${leave.endDate}\n` +
+      `🔢 จำนวน / Total: ${leave.days || "-"} วัน / day(s)\n` +
+      `👤 พิจารณาโดย / Reviewed by: ${reviewedBy || "-"}`;
+    if (!isApproved) {
+      selfText += `\n${DIVIDER}\nกรุณาติดต่อฝ่าย HR หรือหัวหน้างานหากมีข้อสงสัย / Please contact HR or your supervisor if you have questions`;
+    }
     sendLinePush(employee.lineUserId, selfText);
   }
 
@@ -142,10 +176,12 @@ export async function notifyLeaveReviewed(leave, employee, isApproved, reviewedB
   if (recipients.length) {
     const label = isApproved ? "✅ อนุมัติคำขอลา / Leave approved" : "❌ ไม่อนุมัติคำขอลา / Leave rejected";
     const text =
-      `${label}\n` +
-      `พนักงาน / Employee: ${leave.employeeName || (employee && employee.name) || "-"}\n` +
-      `วันที่ / Dates: ${leave.startDate} - ${leave.endDate}\n` +
-      `พิจารณาโดย / Reviewed by: ${reviewedBy || "-"}`;
+      `${label}\n${DIVIDER}\n` +
+      `👤 พนักงาน / Employee: ${leave.employeeName || (employee && employee.name) || "-"}\n` +
+      `🏢 แผนก / Department: ${employee ? employee.department || "-" : "-"}\n` +
+      `📋 ประเภท / Type: ${leave.typeLabel || leave.typeId || "-"}\n` +
+      `🗓️ ช่วงวันที่ / Dates: ${leave.startDate} ถึง / to ${leave.endDate}\n` +
+      `👤 พิจารณาโดย / Reviewed by: ${reviewedBy || "-"}`;
     sendLinePush(recipients, text);
   }
 }

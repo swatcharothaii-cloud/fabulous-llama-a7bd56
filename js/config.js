@@ -15,8 +15,11 @@ export const FIREBASE_CONFIG = {
 };
 
 // 2) LINE LIFF ID (LINE Developers Console > สร้าง LIFF app) — ถ้าไม่ต้องการรันผ่าน LINE ให้เว้นว่างไว้เป็น ""
-export const LIFF_ID = "2010761793-s9SYXSSn"; // ใช้กับหน้าพนักงาน (index.html)
-export const LIFF_ID_ADMIN = "2010761793-qoipiOoE"; // ใช้กับหน้าแอดมิน (admin.html) — คนละ LIFF app กับข้างบน
+//    สำคัญ: LIFF app ทั้ง 2 ตัวนี้ต้องอยู่ใน Provider เดียวกับ Messaging API channel ที่ใช้ส่งแจ้งเตือน LINE
+//    (ตัวที่ออก LINE_CHANNEL_ACCESS_TOKEN ใน Netlify) ไม่งั้น lineUserId ที่ได้จะไม่ตรงกับที่บอทรู้จัก
+//    ทำให้ส่งข้อความแจ้งเตือนไม่ได้ (ดูหัวข้อ "แจ้งเตือนเข้า LINE" ใน README.md)
+export const LIFF_ID = "2010761793-s9SYXSSn"; // ใช้กับหน้าพนักงาน (index.html) — channel "HR" ใน Provider "Admin"
+export const LIFF_ID_ADMIN = "2010761793-qoipiOoE"; // ใช้กับหน้าแอดมิน (admin.html) — channel "HR Admin" ใน Provider "Admin"
 
 // 3) ข้อมูลบริษัท (แสดงหัวหน้า) — แก้ไขได้ตามต้องการ
 export const COMPANY = {
@@ -50,6 +53,18 @@ export const DEPARTMENTS = [
   "Purchasing",
   "Supervisor all team",
 ];
+
+// สีประจำแต่ละแผนก (ใช้แสดงเป็นแถบสี/ป้ายสีในหน้าแอดมิน เพื่อแยกพนักงานตามแผนกได้ง่ายด้วยตา)
+// ถ้ามีแผนกเพิ่มใหม่ที่ไม่อยู่ในนี้ ระบบจะสุ่มสีให้อัตโนมัติแบบคงที่ (ดู getDepartmentColor ใน admin.js)
+export const DEPARTMENT_COLORS = {
+  "ผู้บริหาร": "#ef4444",
+  "Accounting": "#3b82f6",
+  "Architect": "#8b5cf6",
+  "Build-In": "#f59e0b",
+  "Marketing": "#ec4899",
+  "Purchasing": "#10b981",
+  "Supervisor all team": "#0ea5e9",
+};
 
 // ============================================================
 //  กะการทำงาน (Shifts) — ตั้งค่าไว้ 4 กะเริ่มต้น แก้ไข/เพิ่ม/ลบได้ที่นี่

@@ -8,7 +8,7 @@
 //  - ถ้าเปิดผ่านเบราว์เซอร์ปกติ (ไม่มี LIFF หรือยังไม่ได้ตั้งค่า LIFF_ID): ใช้วิธีเดิมคือเลือกชื่อ
 //    แล้วจดจำไว้ในอุปกรณ์เครื่องนั้น (localStorage)
 import { LIFF_ID, COMPANY, SHIFTS, DEFAULT_WEEKLY_DAYOFF } from "./config.js";
-import { db, collection, addDoc, getDocs, query, where, serverTimestamp } from "./firebase-init.js";
+import { db, collection, addDoc, doc, updateDoc, getDocs, query, where, serverTimestamp } from "./firebase-init.js";
 import { EMPLOYEES_COLLECTION } from "./firebase-init.js";
 import {
   renderCompanyBrandBar,
@@ -24,7 +24,7 @@ import { initAttendance } from "./attendance.js";
 import { initLeave } from "./leave.js";
 import { initSwapRequest } from "./swaprequest.js";
 import { initMyTeam } from "./myteam.js";
-import { bi, applyI18n, initLangToggle } from "./i18n.js";
+import { bi, deptBi, applyI18n, initLangToggle } from "./i18n.js";
 
 renderCompanyBrandBar("brand-bar", COMPANY);
 applyI18n();
@@ -95,20 +95,117 @@ function showIdentityScreen() {
   const titleEl = document.getElementById("id-screen-title");
   const subtitleEl = document.getElementById("id-screen-subtitle");
   if (identityMode === "link") {
-    titleEl.textContent = bi("🔗 ลงทะเบียนผูกบัญชี LINE ของคุณ", "🔗 Register & link your LINE account");
+    titleEl.textContent = bi("🔗 เชื่อมบัญชี LINE ของคุณ", "🔗 Link your LINE account");
     subtitleEl.textContent = bi(
-      "กรอกข้อมูลของคุณเพื่อลงทะเบียน (ทำครั้งเดียวเท่านั้น) ข้อมูลนี้จะผูกกับบัญชี LINE นี้โดยเฉพาะ และระบบจะจำคุณได้อัตโนมัติทุกครั้งที่เปิดผ่าน LINE",
-      "Fill in your details to register (one time only). This will be linked to this LINE account and the system will recognize you automatically every time you open it through LINE."
+      "เลือกชื่อของคุณจากรายชื่อพนักงานด้านล่าง (ถ้าแอดมินเพิ่มชื่อคุณไว้แล้ว) เพื่อผูกกับบัญชี LINE นี้ — ระบบจะจำคุณได้อัตโนมัติทุกครั้งที่เปิดผ่าน LINE ไม่ต้องเลือกซ้ำอีก",
+      "Select your name from the employee list below (if your admin already added you) to link it with this LINE account — the system will recognize you automatically every time you open it through LINE."
     );
   } else {
-    titleEl.textContent = bi("👋 ลงทะเบียนใช้งานครั้งแรก", "👋 First-time registration");
+    titleEl.textContent = bi("👋 ยินดีต้อนรับ", "👋 Welcome");
     subtitleEl.textContent = bi(
-      "กรอกข้อมูลของคุณเพื่อลงทะเบียน (ทำครั้งเดียวเท่านั้น) หลังจากยืนยันแล้วระบบจะจดจำไว้ในอุปกรณ์นี้โดยเฉพาะ ไม่ต้องกรอกซ้ำในครั้งถัดไป",
-      "Fill in your details to register (one time only). After confirming, the system will remember you on this device — no need to fill this in again."
+      "เลือกชื่อของคุณจากรายชื่อพนักงานด้านล่าง (ถ้าแอดมินเพิ่มชื่อคุณไว้แล้ว) — หลังจากเลือกแล้วระบบจะจดจำไว้ในอุปกรณ์นี้โดยเฉพาะ ไม่ต้องเลือกซ้ำในครั้งถัดไป",
+      "Select your name from the employee list below (if your admin already added you) — after selecting, the system will remember you on this device, no need to select again next time."
     );
   }
+
+  const hasUnclaimed = allEmployees.some((e) => !e.lineUserId && !e.claimedByDevice);
+  const selectPanel = document.getElementById("select-existing-panel");
   const form = document.getElementById("register-form");
+  // ถ้ายังไม่มีรายชื่อที่ว่างให้เลือกเลย (เช่น แอดมินยังไม่ได้เพิ่มใครไว้ล่วงหน้า) ให้ข้ามไปหน้าลงทะเบียนใหม่เลย
+  // แต่ถ้ามี ให้เริ่มที่หน้า "เลือกชื่อ" ก่อนเสมอ เพื่อกันไม่ให้เผลอสร้างชื่อซ้ำกับที่มีอยู่แล้วในระบบ
+  if (selectPanel) selectPanel.style.display = hasUnclaimed ? "block" : "none";
+  if (form) form.style.display = hasUnclaimed ? "none" : "block";
+  const searchInput = document.getElementById("emp-search-input");
+  if (searchInput) searchInput.value = "";
+  renderEmployeeSelectList();
   if (form) form.reset();
+}
+
+// ---------- เลือกชื่อจากรายชื่อพนักงานที่มีอยู่แล้ว (ยังไม่ถูกจับคู่กับอุปกรณ์/บัญชี LINE ใดๆ) ----------
+function renderEmployeeSelectList() {
+  const wrap = document.getElementById("emp-select-list");
+  const searchInput = document.getElementById("emp-search-input");
+  if (!wrap) return;
+  const q = ((searchInput && searchInput.value) || "").trim().toLowerCase();
+  const unclaimed = allEmployees.filter((e) => !e.lineUserId && !e.claimedByDevice);
+  const filtered = q
+    ? unclaimed.filter(
+        (e) =>
+          (e.name || "").toLowerCase().includes(q) ||
+          (e.fullName || "").toLowerCase().includes(q) ||
+          (e.employeeCode || "").toLowerCase().includes(q)
+      )
+    : unclaimed;
+
+  if (!unclaimed.length) {
+    wrap.innerHTML = `<p class="hint">${bi(
+      "ยังไม่มีรายชื่อพนักงานที่ยังไม่ถูกจับคู่ในระบบ กรุณาลงทะเบียนใหม่ด้านล่าง",
+      "No unclaimed employee names available. Please register below."
+    )}</p>`;
+    return;
+  }
+  if (!filtered.length) {
+    wrap.innerHTML = `<p class="hint">${bi("ไม่พบชื่อที่ค้นหา", "No matching name found")}</p>`;
+    return;
+  }
+  wrap.innerHTML = filtered
+    .map(
+      (e) => `
+      <div class="emp-pick-item" data-pick="${e.id}">
+        <div class="name">${escapeHtml(e.name)}</div>
+        <div class="meta">${e.employeeCode ? escapeHtml(e.employeeCode) + " • " : ""}${
+        e.department ? deptBi(e.department) : bi("ยังไม่ระบุแผนก", "No department")
+      }</div>
+      </div>`
+    )
+    .join("");
+  wrap.querySelectorAll("[data-pick]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const emp = allEmployees.find((x) => x.id === el.dataset.pick);
+      if (emp) claimExistingEmployee(emp);
+    });
+  });
+}
+
+document.getElementById("emp-search-input")?.addEventListener("input", renderEmployeeSelectList);
+document.getElementById("show-register-link")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  document.getElementById("select-existing-panel").style.display = "none";
+  document.getElementById("register-form").style.display = "block";
+});
+document.getElementById("show-select-link")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  document.getElementById("select-existing-panel").style.display = "block";
+  document.getElementById("register-form").style.display = "none";
+  renderEmployeeSelectList();
+});
+
+// เลือกชื่อที่มีอยู่แล้ว -> ผูกกับบัญชี LINE นี้ หรืออุปกรณ์นี้ (ไม่สร้างพนักงานใหม่ซ้ำ)
+async function claimExistingEmployee(emp) {
+  try {
+    const payload = { updatedAt: serverTimestamp() };
+    if (identityMode === "link" && liffProfile) {
+      payload.lineUserId = liffProfile.userId;
+      payload.lineDisplayName = liffProfile.displayName || "";
+      payload.linePictureUrl = liffProfile.pictureUrl || null;
+    } else {
+      payload.claimedByDevice = getDeviceToken();
+    }
+    await updateDoc(doc(db, EMPLOYEES_COLLECTION, emp.id), payload);
+    const updatedEmp = { ...emp, ...payload };
+    const idx = allEmployees.findIndex((e) => e.id === emp.id);
+    if (idx >= 0) allEmployees[idx] = updatedEmp;
+
+    if (identityMode !== "link") {
+      saveMyEmployeeId(emp.id);
+    }
+
+    showToast(bi(`✅ ยินดีต้อนรับกลับคุณ ${emp.name}`, `✅ Welcome back, ${emp.name}`));
+    enterApp(updatedEmp);
+  } catch (err) {
+    console.error(err);
+    showToast(bi("❌ เลือกชื่อไม่สำเร็จ กรุณาลองใหม่", "❌ Failed to select your name, please try again"));
+  }
 }
 
 // ลงทะเบียนใช้งานครั้งแรก: กรอกข้อมูลส่วนตัว -> สร้างพนักงานใหม่ในระบบ -> ผูกกับบัญชี LINE

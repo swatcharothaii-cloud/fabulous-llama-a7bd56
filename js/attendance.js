@@ -425,7 +425,7 @@ async function recordEvent(type, photoDataUrl) {
     // แจ้งเตือนเข้า LINE ของตัวเอง/หัวหน้าทีม/แอดมิน — ส่งผ่าน Netlify Function (ดู js/notify.js) ไม่ใช้
     // liff.sendMessages() (ซึ่งจะโพสต์เข้าห้องแชทที่เปิดแอปอยู่ อาจหลุดไปห้องแชทกลุ่มได้) ไม่ต้องรอผลเสร็จ
     // ก่อน (fire-and-forget) เพราะถ้าส่งแจ้งเตือนไม่สำเร็จก็ไม่ควรทำให้ผู้ใช้เห็นว่าการบันทึกเวลาล้มเหลวไปด้วย
-    notifyAttendanceEvent(employee, type === "in", now, pos).catch((e) => console.warn("แจ้งเตือน LINE ไม่สำเร็จ", e));
+    notifyAttendanceEvent(employee, type === "in", now, pos, shift).catch((e) => console.warn("แจ้งเตือน LINE ไม่สำเร็จ", e));
     // รีเฟรช listener เสมอ (เผื่อกะข้ามเที่ยงคืน หรือเพิ่งเช็คอินครั้งแรกของวันไปหมาดๆ)
     await watchToday();
   } catch (e) {

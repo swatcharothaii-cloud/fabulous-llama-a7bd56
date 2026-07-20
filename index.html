@@ -17,7 +17,22 @@
   <div class="login-card">
     <h2 style="margin-top:0;" id="id-screen-title">👋 ลงทะเบียนใช้งานครั้งแรก</h2>
     <p class="hint" id="id-screen-subtitle">กรอกข้อมูลของคุณเพื่อลงทะเบียน (ทำครั้งเดียวเท่านั้น) ระบบจะจดจำไว้ให้ ไม่ต้องกรอกซ้ำในครั้งถัดไป</p>
-    <form id="register-form" style="margin-top:14px;">
+
+    <!-- เลือกชื่อจากรายชื่อพนักงานที่มีอยู่แล้ว (แอดมินเพิ่มไว้ล่วงหน้า) — ป้องกันไม่ให้เกิดรายชื่อซ้ำ
+         จากการที่พนักงานกรอกฟอร์ม "ลงทะเบียนใหม่" ทั้งที่ชื่อของตัวเองมีอยู่ในระบบแล้ว -->
+    <div id="select-existing-panel">
+      <div class="field">
+        <label data-i18n="reg.searchLabel">🔍 ค้นหาชื่อของคุณจากรายชื่อพนักงาน</label>
+        <input type="text" id="emp-search-input" placeholder="พิมพ์ชื่อเพื่อค้นหา..." data-i18n-placeholder="reg.searchPh">
+      </div>
+      <div id="emp-select-list" class="emp-pick-list"></div>
+      <p class="hint" style="margin-top:14px; text-align:center;">
+        <span data-i18n="reg.notInList">ไม่เจอชื่อของคุณ?</span>
+        <a href="#" id="show-register-link" data-i18n="reg.registerNewLink">ลงทะเบียนพนักงานใหม่</a>
+      </p>
+    </div>
+
+    <form id="register-form" style="margin-top:14px; display:none;">
       <div class="field">
         <label data-i18n="reg.fullname">ชื่อ-นามสกุล *</label>
         <input type="text" id="reg-fullname" placeholder="เช่น สมชาย ใจดี" data-i18n-placeholder="reg.fullnamePh" required>
@@ -31,6 +46,9 @@
         <input type="date" id="reg-dob" required>
       </div>
       <button type="submit" class="btn btn-primary" id="reg-submit-btn" style="width:100%; margin-top:6px;" data-i18n="reg.submit">✅ ลงทะเบียน</button>
+      <p class="hint" style="margin-top:14px; text-align:center;">
+        <a href="#" id="show-select-link" data-i18n="reg.backToSelectLink">← กลับไปเลือกชื่อจากรายชื่อเดิม</a>
+      </p>
     </form>
   </div>
 </div>
