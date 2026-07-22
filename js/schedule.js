@@ -24,15 +24,31 @@ export function resolveShiftDate(shift, now = new Date()) {
   return calendarToday;
 }
 
+// หาว่าวันที่ระบุ (ต้องเป็นวันเสาร์เท่านั้น) เป็น "เสาร์ที่ 2 หรือ 4 ของเดือน" หรือไม่ — ใช้กับ
+// พนักงานกลุ่ม "BKK Office" ที่หยุดวันอาทิตย์ปกติ + เสาร์เว้นสัปดาห์ (สัปดาห์ที่ 2 และ 4) เพิ่มอีกวัน
+// (นับแบบ ceil(วันที่ / 7) จึงถูกต้องเสมอไม่ว่าวันที่ 1 ของเดือนจะตรงกับวันไหนก็ตาม)
+function isSecondOrFourthSaturday(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (d.getDay() !== 6) return false; // ไม่ใช่วันเสาร์ ไม่เกี่ยวข้อง
+  const nth = Math.ceil(d.getDate() / 7);
+  return nth === 2 || nth === 4;
+}
+
 // swaps: รายการจาก collection "dayOffSwaps" แต่ละรายการ
 //   { employeeId, originalDate, newDate, reason, ... }
 //   ความหมาย: พนักงานคนนี้ "สลับ" วันหยุดจาก originalDate ไปเป็น newDate แทน
 //   -> originalDate จะกลายเป็นวันทำงานปกติ (isSwappedToWork)
 //   -> newDate จะกลายเป็นวันหยุดแทน (isSwappedDayOff)
+//
+// employee.extraBiweeklySaturdayOff = true -> กลุ่ม "BKK Office" (ดู README/แผนกที่ตั้งไว้) หยุดเพิ่มทุก
+// เสาร์ที่ 2 และ 4 ของเดือน นอกเหนือจากวันหยุดประจำสัปดาห์ปกติ (employee.weeklyDayOff) — ตั้งค่าได้ที่หน้า
+// แอดมิน → แก้ไขพนักงาน → "หยุดเสาร์ที่ 2 และ 4 ของเดือนเพิ่ม (BKK Office)"
 export function getDayFlags({ date, employee, holidays = [], swaps = [] }) {
   const isHoliday = holidays.some((h) => h.date === date);
   const weeklyDayOff = employee?.weeklyDayOff;
-  const isWeeklyDayOff = weeklyDayOff !== undefined && weeklyDayOff !== null && dayOfWeek(date) === Number(weeklyDayOff);
+  const isPlainWeeklyDayOff = weeklyDayOff !== undefined && weeklyDayOff !== null && dayOfWeek(date) === Number(weeklyDayOff);
+  const isBiweeklySaturdayOff = !!employee?.extraBiweeklySaturdayOff && isSecondOrFourthSaturday(date);
+  const isWeeklyDayOff = isPlainWeeklyDayOff || isBiweeklySaturdayOff;
 
   // เฉพาะรายการที่ "อนุมัติแล้ว" เท่านั้นที่มีผลจริงต่อปฏิทิน — รายการที่แอดมินเพิ่มเองโดยตรง (ไม่มี
   // ฟิลด์ status) ถือว่าอนุมัติแล้วโดยปริยาย ส่วนคำขอที่พนักงานยื่นเองจะมี status: "รออนุมัติ"/"ไม่อนุมัติ"
@@ -42,7 +58,7 @@ export function getDayFlags({ date, employee, holidays = [], swaps = [] }) {
   const isSwappedToWork = mySwaps.some((s) => s.originalDate === date);
   const isSwappedDayOff = mySwaps.some((s) => s.newDate === date);
 
-  return { isHoliday, isWeeklyDayOff, isSwappedToWork, isSwappedDayOff };
+  return { isHoliday, isWeeklyDayOff, isBiweeklySaturdayOff, isSwappedToWork, isSwappedDayOff };
 }
 
 // คืนป้ายกำกับสั้นๆ สำหรับแสดงผล เช่น "วันหยุดนักขัตฤกษ์", "วันหยุดประจำสัปดาห์", "วันหยุด (สลับ)", "วันทำงาน (สลับ)"
@@ -51,6 +67,7 @@ export function getDayLabel(dayFlags) {
   if (dayFlags.isSwappedDayOff) return { category, text: bi("วันหยุด (สลับ)", "Day off (swapped)"), color: "#8b5cf6" };
   if (dayFlags.isSwappedToWork) return { category, text: bi("วันทำงาน (สลับวันหยุด)", "Working day (swapped)"), color: "#0ea5e9" };
   if (dayFlags.isHoliday) return { category, text: bi("วันหยุดนักขัตฤกษ์", "Public holiday"), color: "#ef4444" };
+  if (dayFlags.isBiweeklySaturdayOff) return { category, text: bi("วันหยุด (เสาร์เว้นสัปดาห์)", "Day off (biweekly Saturday)"), color: "#f59e0b" };
   if (dayFlags.isWeeklyDayOff) return { category, text: bi("วันหยุดประจำสัปดาห์", "Weekly day off"), color: "#f59e0b" };
   return { category, text: bi("วันทำงานปกติ", "Regular working day"), color: "#10b981" };
 }

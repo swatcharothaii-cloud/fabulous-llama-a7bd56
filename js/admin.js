@@ -380,6 +380,8 @@ async function onSaveEmployee(e) {
   e.preventDefault();
   const editId = document.getElementById("emp-edit-id").value;
   const isTeamLead = document.getElementById("emp-team-lead").checked;
+  const isCompanySupervisor = document.getElementById("emp-company-supervisor").checked;
+  const isBiweeklySatOff = document.getElementById("emp-biweekly-sat-off").checked;
   const data = {
     employeeCode: document.getElementById("emp-code").value.trim(),
     name: document.getElementById("emp-name").value.trim(),
@@ -387,6 +389,8 @@ async function onSaveEmployee(e) {
     shiftId: document.getElementById("emp-shift").value,
     weeklyDayOff: Number(document.getElementById("emp-dayoff").value),
     teamLeadOf: isTeamLead ? document.getElementById("emp-dept").value : null,
+    companyWideSupervisor: isCompanySupervisor,
+    extraBiweeklySaturdayOff: isBiweeklySatOff,
     leaveQuota: readLeaveQuotaFormFields(),
     active: true,
     updatedBy: admin.name,
@@ -423,6 +427,8 @@ function resetEmployeeForm() {
   document.getElementById("emp-form").reset();
   document.getElementById("emp-edit-id").value = "";
   document.getElementById("emp-team-lead").checked = false;
+  document.getElementById("emp-company-supervisor").checked = false;
+  document.getElementById("emp-biweekly-sat-off").checked = false;
   document.getElementById("emp-form-title").textContent = bi("➕ เพิ่มพนักงานใหม่", "➕ Add new employee");
   document.getElementById("emp-cancel-edit-btn").style.display = "none";
   // เติมโควต้าวันลาเริ่มต้น = ค่าเริ่มต้นของบริษัท (แอดมินปรับเฉพาะคนนี้ได้ก่อนกดบันทึก)
@@ -501,13 +507,14 @@ function renderEmployeeRowHtml(emp, nameCounts) {
           ${escapeHtml(emp.name)}
           ${emp.active === false ? `<span class="badge" style="background:#fee2e2;color:#ef4444;">${bi("ปิดใช้งาน/ลบแล้ว", "Disabled/Deleted")}</span>` : ""}
           ${emp.teamLeadOf ? `<span class="badge" style="background:#fef3c7;color:#b45309;">⭐ ${bi("หัวหน้าทีม", "Team lead")}</span>` : ""}
+          ${emp.companyWideSupervisor ? `<span class="badge" style="background:#e0e7ff;color:#4338ca;" title="${bi("หัวหน้าทีมทุกแผนกระดับบริษัท", "Company-wide supervisor across all teams")}">🛡️ ${bi("Supervisor ทุกทีม (Admin)", "Supervisor all team (Admin)")}</span>` : ""}
           ${dupBadge}
           ${regBadge}
         </div>
         <div class="emp-meta">
           ${emp.employeeCode || "-"} • ${deptChip} •
           ${shift ? `<span class="shift-chip" style="background:${shift.color}22; color:${shift.color};"><span class="dot" style="background:${shift.color};"></span>${shiftNameBi(shift.name)}</span>` : bi("ไม่มีกะ", "No shift")}
-          • ${bi("หยุด", "Off")}${weekdayBi(emp.weeklyDayOff ?? 0)}
+          • ${bi("หยุด", "Off")}${weekdayBi(emp.weeklyDayOff ?? 0)}${emp.extraBiweeklySaturdayOff ? ` + ${bi("เสาร์สัปดาห์ที่ 2,4 (BKK Office)", "2nd/4th Sat (BKK Office)")}` : ""}
           ${emp.lineUserId ? ` • LINE: ${escapeHtml(emp.lineDisplayName || "-")}` : ""}
         </div>
         ${
@@ -641,6 +648,8 @@ function startEditEmployee(id) {
   document.getElementById("emp-shift").value = emp.shiftId || "";
   document.getElementById("emp-dayoff").value = String(emp.weeklyDayOff ?? 0);
   document.getElementById("emp-team-lead").checked = !!(emp.teamLeadOf && emp.teamLeadOf === emp.department);
+  document.getElementById("emp-company-supervisor").checked = !!emp.companyWideSupervisor;
+  document.getElementById("emp-biweekly-sat-off").checked = !!emp.extraBiweeklySaturdayOff;
   setLeaveQuotaFormFields(resolveEmployeeQuota(emp, leaveQuotaDefaults));
   document.getElementById("emp-form-title").textContent = bi(`✏️ แก้ไขพนักงาน: ${emp.name}`, `✏️ Edit employee: ${emp.name}`);
   document.getElementById("emp-cancel-edit-btn").style.display = "inline-flex";
@@ -760,7 +769,7 @@ async function exportEmployeesExcel() {
           emp.name || "",
           emp.department || "",
           shift ? `${shift.name} (${shift.start}-${shift.end})` : "-",
-          DAY_OFF_NAMES_TH[emp.weeklyDayOff ?? 0],
+          DAY_OFF_NAMES_TH[emp.weeklyDayOff ?? 0] + (emp.extraBiweeklySaturdayOff ? " + เสาร์สัปดาห์ที่ 2,4 (BKK Office)" : ""),
           emp.active === false ? "ปิดใช้งาน" : "ใช้งานอยู่",
         ]);
       });
@@ -1550,7 +1559,24 @@ async function computeSummaryForDate(dateStr, deptFilter) {
 
 const LINE_SUMMARY_DIVIDER = "----------------------------";
 
+// รายชื่อพนักงานในกลุ่มหนึ่ง (มาสาย/ยังไม่มา) -> ข้อความแบบขึ้นบรรทัดใหม่ทีละคน (บูลเล็ต) อ่านง่ายกว่า
+// การเรียงชื่อคั่นด้วยจุลภาคยาวๆ มาก (ปัญหาที่แจ้งมา) — ถ้าคนในกลุ่มคือ "ทุกคนในบริษัท/แผนกนั้น" พอดี
+// (เช่น ยังไม่มีใครเช็คอินเลยตอนเช้าตรู่) จะไม่แสดงชื่อซ้ำทั้งหมด เพราะตัวเลขด้านบนบอกอยู่แล้วว่าคือทุกคน
+// และถ้ารายชื่อยาวเกินไป จะตัดแสดงบางส่วน + บอกจำนวนที่เหลือ กันข้อความยาวจนอ่านไม่ไหว
+const NAME_LIST_CAP = 20;
+function formatNameListText(names, totalForContext) {
+  if (!names.length) return "";
+  if (totalForContext && totalForContext > 5 && names.length >= totalForContext) return "";
+  const shown = names.slice(0, NAME_LIST_CAP);
+  let out = "\n" + shown.map((n) => `   • ${n}`).join("\n");
+  if (names.length > NAME_LIST_CAP) {
+    out += `\n   • ${bi(`และอีก ${names.length - NAME_LIST_CAP} คน`, `and ${names.length - NAME_LIST_CAP} more`)}`;
+  }
+  return out;
+}
+
 // แปลงผลสรุป 1 วัน (ของ 1 แผนก หรือภาพรวม) เป็นข้อความสั้นๆ ไม่มีหัวข้อวันที่ (ใส่หัวข้อวันที่ครอบไว้ด้านนอกอีกที)
+// จัดเป็นกลุ่มๆ คั่นด้วยบรรทัดว่าง ให้อ่านง่ายขึ้น แทนที่จะเป็นข้อความยาวติดกันหมด
 function formatSummaryBlock(s, label) {
   const pct = s.total ? Math.round((s.checkedIn / s.total) * 100) : 0;
   let text = label ? `▸ ${label}\n` : "";
@@ -1558,11 +1584,14 @@ function formatSummaryBlock(s, label) {
   text += `🟢 เช็คอินแล้ว / Checked in: ${s.checkedIn} คน (${pct}%)\n`;
   text += `🔴 เช็คเอาท์แล้ว / Checked out: ${s.checkedOut} คน\n`;
   text += `🌴 ลา / On leave: ${s.onLeave} คน\n`;
-  text += `📅 วันหยุด / Day off: ${s.dayOff} คน\n`;
-  text += `⚠️ มาสาย / Late: ${s.lateCount} คน`;
-  if (s.lateNames.length) text += ` (${s.lateNames.join(", ")})`;
-  text += `\n❌ ยังไม่มาลงเวลา / Not clocked in: ${s.absent} คน`;
-  if (s.absentNames.length) text += ` (${s.absentNames.join(", ")})`;
+  text += `📅 วันหยุด / Day off: ${s.dayOff} คน`;
+
+  text += `\n\n⚠️ มาสาย / Late: ${s.lateCount} คน`;
+  text += formatNameListText(s.lateNames, s.total);
+
+  text += `\n\n❌ ยังไม่มาลงเวลา / Not clocked in: ${s.absent} คน`;
+  text += formatNameListText(s.absentNames, s.total);
+
   return text;
 }
 

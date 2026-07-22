@@ -164,6 +164,14 @@ const DICT = {
     'แต่งตั้งเป็นหัวหน้าทีมของแผนกนี้ (จะเห็นแท็บ "ทีมของฉัน" และได้รับแจ้งเตือนเมื่อทีมเช็คอิน/เช็คเอาท์)',
     'Appoint as team lead for this department (will see the "My Team" tab and get notified when the team checks in/out)',
   ],
+  "emp.companySupervisorLabel": [
+    "แต่งตั้งเป็นหัวหน้าทีมทุกแผนกระดับบริษัท / Supervisor all team (Admin) — จะขึ้นสัญลักษณ์พิเศษที่ชื่อ ไม่ต้องเพิ่มชื่อซ้ำ",
+    "Appoint as company-wide supervisor across all teams (Admin) — shows a special badge on this name, no need for a separate entry",
+  ],
+  "emp.biweeklySatOffLabel": [
+    "หยุดเพิ่มทุกวันเสาร์ที่ 2 และ 4 ของเดือน (กลุ่ม BKK Office) — นอกเหนือจากวันหยุดประจำสัปดาห์ปกติด้านบน",
+    "Also off every 2nd and 4th Saturday of the month (BKK Office group) — in addition to the regular weekly day off above",
+  ],
   "emp.searchPh": ["🔍 ค้นหาพนักงาน...", "🔍 Search employees..."],
   "emp.dupFilterBtn": ["⚠️ แสดงเฉพาะชื่อซ้ำ", "⚠️ Show duplicates only"],
   "emp.viewActive": ["👥 พนักงานที่ใช้งานอยู่", "👥 Active employees"],
@@ -262,7 +270,8 @@ export function initLangToggle(buttonId) {
 // ---------- แปลค่าที่ "เก็บอยู่ในฐานข้อมูลเป็นภาษาไทยเสมอ" สำหรับแสดงผลเท่านั้น (ไม่แตะค่าจริง) ----------
 // key = ค่าไทยที่เก็บจริงใน Firestore, value = คำแปลอังกฤษที่แสดงผล
 const DEPARTMENT_EN = {
-  "ผู้บริหาร": "Management",
+  "Management team": "Management team",
+  "ผู้บริหาร": "Management team",
   "Accounting": "Accounting",
   "Architect": "Architect",
   "Build-In": "Build-In",

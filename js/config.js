@@ -45,36 +45,40 @@ export const ADMINS = [
 //  แผนก — ตรงตามโครงสร้างแผนกจริงของบริษัท (จากไฟล์รายชื่อพนักงาน)
 // ============================================================
 export const DEPARTMENTS = [
-  "ผู้บริหาร",
+  "Management team",
   "Accounting",
   "Architect",
   "Build-In",
   "Marketing",
   "Purchasing",
-  "Supervisor all team",
 ];
 
 // สีประจำแต่ละแผนก (ใช้แสดงเป็นแถบสี/ป้ายสีในหน้าแอดมิน เพื่อแยกพนักงานตามแผนกได้ง่ายด้วยตา)
 // ถ้ามีแผนกเพิ่มใหม่ที่ไม่อยู่ในนี้ ระบบจะสุ่มสีให้อัตโนมัติแบบคงที่ (ดู getDepartmentColor ใน admin.js)
 export const DEPARTMENT_COLORS = {
-  "ผู้บริหาร": "#ef4444",
+  "Management team": "#ef4444",
   "Accounting": "#3b82f6",
   "Architect": "#8b5cf6",
   "Build-In": "#f59e0b",
   "Marketing": "#ec4899",
   "Purchasing": "#10b981",
+  // ค่าเก่า เก็บไว้เผื่อพนักงานเก่าที่ยังไม่ถูกซิงก์ยังอ้างอิงชื่อแผนกแบบเดิมอยู่ (จะได้ไม่ขึ้นสีสุ่ม)
+  "ผู้บริหาร": "#ef4444",
   "Supervisor all team": "#0ea5e9",
 };
 
 // ============================================================
-//  กะการทำงาน (Shifts) — ตั้งค่าไว้ 4 กะเริ่มต้น แก้ไข/เพิ่ม/ลบได้ที่นี่
+//  กะการทำงาน (Shifts) — ตั้งค่าไว้ 5 กะเริ่มต้น แก้ไข/เพิ่ม/ลบได้ที่นี่
 //  crossesMidnight: true = กะที่เวลาสิ้นสุดข้ามเที่ยงคืนไปอีกวัน (เช่น กะดึก)
+//  หมายเหตุ: "office_0817" คือกะออฟฟิศตามไฟล์รายชื่อพนักงานล่าสุด (บัญชี/การตลาด/จัดซื้อ/สถาปนิก/Build-In
+//  ทุกแผนกใช้กะนี้ตรงกัน) ส่วน "office" (09:00-18:00) เก็บไว้เผื่อมีพนักงานเก่าอ้างอิงอยู่ ไม่ได้ใช้ต่อแล้ว
 // ============================================================
 export const SHIFTS = [
   { id: "morning", name: "กะเช้า", start: "08:00", end: "17:00", breakMinutes: 60, crossesMidnight: false, color: "#f59e0b" },
   { id: "afternoon", name: "กะบ่าย", start: "12:00", end: "21:00", breakMinutes: 60, crossesMidnight: false, color: "#0ea5e9" },
   { id: "night", name: "กะดึก", start: "21:00", end: "06:00", breakMinutes: 60, crossesMidnight: true, color: "#8b5cf6" },
-  { id: "office", name: "กะออฟฟิศ", start: "09:00", end: "18:00", breakMinutes: 60, crossesMidnight: false, color: "#10b981" },
+  { id: "office", name: "กะออฟฟิศ (09:00-18:00)", start: "09:00", end: "18:00", breakMinutes: 60, crossesMidnight: false, color: "#10b981" },
+  { id: "office_0817", name: "กะออฟฟิศ (08:00-17:00)", start: "08:00", end: "17:00", breakMinutes: 60, crossesMidnight: false, color: "#2563eb" },
 ];
 
 // วันหยุดประจำสัปดาห์เริ่มต้น (0 = อาทิตย์, 1 = จันทร์, ... 6 = เสาร์) — ตั้งค่าเริ่มต้นให้พนักงานใหม่
@@ -83,58 +87,60 @@ export const DEFAULT_WEEKLY_DAYOFF = 0; // อาทิตย์
 
 // ============================================================
 //  รายชื่อพนักงานเริ่มต้น (หว่านเมล็ดเข้า Firestore ครั้งแรกที่เปิดหน้าแอดมิน ถ้ายังไม่มีข้อมูล
-//  พนักงานเลยในระบบ) — คัดลอกมาจากไฟล์รายชื่อพนักงานที่แนบมา (รวม 36 คน แยกตามแผนก)
+//  พนักงานเลยในระบบ) — ตรงตามไฟล์รายชื่อพนักงานล่าสุด (รวม 32 คน แยกตามแผนก, อัปเดตล่าสุด 2026-07-20)
 //  หลังจากหว่านเมล็ดครั้งแรกแล้ว ให้ไปแก้ไข/เพิ่ม/ลบพนักงานที่หน้าแอดมินแทนการแก้ไฟล์นี้
-//  (กะการทำงานเริ่มต้นตั้งเป็น "กะออฟฟิศ" ให้ทุกคนไว้ก่อน แอดมินไปปรับกะจริงของแต่ละคนทีหลังได้)
+//  teamLeadOf = หัวหน้าทีมของแผนกนั้น (แสดงป้าย "⭐ หัวหน้าทีม"), companyWideSupervisor = หัวหน้าทีมทุกแผนก
+//  ระดับ Admin (แสดงป้าย "🛡️ Supervisor ทุกทีม") — ทั้งสองแบบเป็นแค่ "สัญลักษณ์" บนรายชื่อเดิม ไม่ใช่แผนกแยก
+//  extraBiweeklySaturdayOff = กลุ่ม "BKK Office" หยุดวันอาทิตย์ปกติ + เสาร์ที่ 2 และ 4 ของเดือนเพิ่มอีกวัน
+//  (ยกเว้น Bass ในแผนก Marketing ที่หยุดแค่วันอาทิตย์อย่างเดียวตามที่ระบุไว้)
 // ============================================================
 export const EMPLOYEES_SEED = [
-  // ผู้บริหาร
-  { name: "K.Eddie", department: "ผู้บริหาร" },
-  { name: "K.Peggy", department: "ผู้บริหาร" },
-  // Accounting
-  { name: "Prem", department: "Accounting" },
-  { name: "TC Accounting", department: "Accounting" },
-  // Architect
-  { name: "Nay", department: "Architect" },
-  { name: "Off", department: "Architect" },
-  // Build-In
-  { name: "Au", department: "Build-In" },
-  { name: "Gee (กี่)", department: "Build-In" },
-  { name: "Ice", department: "Build-In" },
-  { name: "Ing", department: "Build-In" },
-  { name: "Jor Air (จอแอ)", department: "Build-In" },
-  { name: "Ju", department: "Build-In" },
-  { name: "K", department: "Build-In" },
-  { name: "Kung", department: "Build-In" },
-  { name: "Mon", department: "Build-In" },
-  { name: "Ni (หนี่)", department: "Build-In" },
-  { name: "Nong", department: "Build-In" },
-  { name: "Num (หนุ่ม)", department: "Build-In" },
-  { name: "Nurian (หนูเรียน)", department: "Build-In" },
-  { name: "Nut", department: "Build-In" },
-  { name: "Pao", department: "Build-In" },
-  { name: "Prayong", department: "Build-In" },
-  { name: "Qi", department: "Build-In" },
-  { name: "Yhong (โหย่ง)", department: "Build-In" },
-  { name: "ขวัญ", department: "Build-In" },
-  // Marketing
-  { name: "NNOKNK", department: "Marketing" },
-  { name: "Bass", department: "Marketing" },
-  { name: "PP (Pupae)", department: "Marketing" },
-  // Purchasing
-  { name: "Ja (จา)", department: "Purchasing" },
-  { name: "Tua", department: "Purchasing" },
-  // Supervisor all team
-  { name: "Ya", department: "Supervisor all team" },
-  { name: "Art", department: "Supervisor all team" },
-  { name: "Green", department: "Supervisor all team" },
-  { name: "Mui", department: "Supervisor all team" },
-  { name: "Neng", department: "Supervisor all team" },
-  { name: "Orr", department: "Supervisor all team" },
-].map((e, i) => ({
-  employeeCode: `EMP${String(i + 1).padStart(3, "0")}`,
-  shiftId: "office",
-  weeklyDayOff: DEFAULT_WEEKLY_DAYOFF,
+  // ผู้บริหาร (2 คน)
+  { employeeCode: "MD001", name: "K.Eddie", department: "Management team", shiftId: null, weeklyDayOff: null },
+  { employeeCode: "MD002", name: "K.Peggy", department: "Management team", shiftId: null, weeklyDayOff: null },
+  // Accounting (2 คน)
+  { employeeCode: "EMP001", name: "Prem", department: "Accounting", extraBiweeklySaturdayOff: true },
+  { employeeCode: "EMP002", name: "TC Accounting", department: "Accounting" },
+  // Marketing (3 คน + 1 ปิดใช้งาน)
+  { employeeCode: "EMP003", name: "Nokk", department: "Marketing", companyWideSupervisor: true, extraBiweeklySaturdayOff: true },
+  { employeeCode: "EMP004", name: "Treeya", department: "Marketing", companyWideSupervisor: true, active: false },
+  { employeeCode: "EMP005", name: "Bass", department: "Marketing" }, // ยกเว้น: หยุดแค่วันอาทิตย์อย่างเดียว
+  { employeeCode: "EMP006", name: "PP (Pupae)", department: "Marketing", extraBiweeklySaturdayOff: true },
+  // Purchasing (3 คน)
+  { employeeCode: "EMP007", name: "Mui", department: "Purchasing", teamLeadOf: "Purchasing" },
+  { employeeCode: "EMP008", name: "Ja (จา)", department: "Purchasing" },
+  { employeeCode: "EMP009", name: "Tua", department: "Purchasing" },
+  // Architect (3 คน)
+  { employeeCode: "EMP010", name: "กรีน", department: "Architect", teamLeadOf: "Architect", extraBiweeklySaturdayOff: true },
+  { employeeCode: "EMP011", name: "Nay", department: "Architect", extraBiweeklySaturdayOff: true },
+  { employeeCode: "EMP012", name: "Off", department: "Architect", extraBiweeklySaturdayOff: true },
+  // Build-In (20 คน)
+  { employeeCode: "EMP013", name: "Art", department: "Build-In", teamLeadOf: "Build-In" },
+  { employeeCode: "EMP014", name: "ขวัญ", department: "Build-In" },
+  { employeeCode: "EMP015", name: "Au", department: "Build-In" },
+  { employeeCode: "EMP016", name: "Gee (กี่)", department: "Build-In" },
+  { employeeCode: "EMP017", name: "Ice", department: "Build-In" },
+  { employeeCode: "EMP018", name: "Ing", department: "Build-In" },
+  { employeeCode: "EMP019", name: "Jor Air (จอแอ)", department: "Build-In" },
+  { employeeCode: "EMP020", name: "Ju", department: "Build-In" },
+  { employeeCode: "EMP021", name: "K", department: "Build-In" },
+  { employeeCode: "EMP022", name: "Kung", department: "Build-In" },
+  { employeeCode: "EMP023", name: "Mon", department: "Build-In" },
+  { employeeCode: "EMP024", name: "Ni (หนี่)", department: "Build-In" },
+  { employeeCode: "EMP025", name: "Nong", department: "Build-In" },
+  { employeeCode: "EMP026", name: "Num (หนุ่ม)", department: "Build-In" },
+  { employeeCode: "EMP027", name: "Nurian (หนูเรียน)", department: "Build-In" },
+  { employeeCode: "EMP028", name: "Nut", department: "Build-In" },
+  { employeeCode: "EMP029", name: "Pao", department: "Build-In" },
+  { employeeCode: "EMP030", name: "Prayong", department: "Build-In" },
+  { employeeCode: "EMP031", name: "Qi", department: "Build-In" },
+  { employeeCode: "EMP032", name: "Yhong (โหย่ง)", department: "Build-In" },
+].map((e) => ({
+  shiftId: "office_0817",
+  weeklyDayOff: DEFAULT_WEEKLY_DAYOFF, // อาทิตย์ (วันหยุดประจำสัปดาห์ปกติของทุกคน)
+  teamLeadOf: null,
+  companyWideSupervisor: false,
+  extraBiweeklySaturdayOff: false, // ค่าเริ่มต้น: ไม่มีวันหยุดเพิ่มพิเศษ — เปิดเฉพาะกลุ่ม "BKK Office" ด้านบน
   active: true,
   ...e,
 }));
